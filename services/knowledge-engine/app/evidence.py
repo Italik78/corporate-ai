@@ -109,6 +109,27 @@ class EvidenceEngine:
                 answerable=False,
                 reason="Няма намерени доказателства.",
             )
+
+        question_keywords = self._question_keywords(question)
+        relevant_source_ids = []
+        for index, result in enumerate(results, start=1):
+            content_words = {
+                self._normalize_word(word)[:7]
+                for word in self.WORD_PATTERN.findall(result.content.lower())
+                if word not in self.STOPWORDS
+            }
+            overlap = question_keywords & content_words
+            if len(overlap) >= 2:
+                relevant_source_ids.append(index)
+
+        if not relevant_source_ids:
+            return EvidenceResult(
+                status=EvidenceStatus.INSUFFICIENT_EVIDENCE,
+                answerable=False,
+                source_ids=[],
+                reason="Намерени са семантично близки резултати, но няма достатъчно ключови съвпадения за надеждно доказателство.",
+            )
+
         source_ids = list(range(1, len(results) + 1))
         conflicts = self._detect_numeric_conflicts(results, question)
         if conflicts:
