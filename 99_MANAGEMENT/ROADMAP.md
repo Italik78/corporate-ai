@@ -21,15 +21,25 @@ Completed:
 - Knowledge Engine v0.x with search, ingest, health and end-to-end RAG query.
 - Grounded positive query and insufficient-evidence negative query.
 - Initial conflict retrieval test.
+- Evidence Engine v0.1 as a separate module.
+- Explicit statuses: SUPPORTED / CONFLICT / INSUFFICIENT_EVIDENCE.
+- Evidence claims with source IDs for detected numeric conflicts.
+- Evidence Engine integration into `/v1/query`.
+- Knowledge Engine v0.1.6 rebuild and runtime validation.
+- Evidence Engine tests: 13/13 PASS.
+- Query API tests: 3/3 PASS.
+- Live validation of SUPPORTED, CONFLICT and INSUFFICIENT_EVIDENCE.
+
+Current limitation:
+- Conflict detection is currently a numeric candidate detector, not a final semantic conflict resolver.
+- Retrieval can return additional low-relevance chunks, so retrieval quality remains a separate task.
 
 Next:
-1. Evidence Engine v0.1 as a separate module.
-2. Explicit statuses: SUPPORTED / CONFLICT / INSUFFICIENT_EVIDENCE.
-3. Evidence claims with source IDs and provenance.
-4. Integrate Evidence Engine into `/v1/query`.
-5. Add partial-answer handling for mixed questions.
-6. Conditional reranking and evidence fusion.
-7. Evaluate knowledge graph for procedural/organizational relationships.
+1. Claims and provenance model.
+2. Partial-answer handling for mixed questions.
+3. Conditional reranking and evidence fusion.
+4. Improve semantic conflict detection.
+5. Evaluate knowledge graph for procedural/organizational relationships.
 
 ## Phase 4 — Multimodal
 Vision; PDF/image pipeline; structured extraction.
