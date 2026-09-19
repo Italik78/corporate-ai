@@ -77,7 +77,7 @@ class EvidenceEngine:
                 "number": number,
                 "sentence": sentence,
                 "overlap": question_keywords & words,
-                "relevant": len(question_keywords & words) >= 2,
+                "relevant": len(question_keywords & words) >= 3,
             })
         return contexts
 
@@ -119,7 +119,7 @@ class EvidenceEngine:
                 if word not in self.STOPWORDS
             }
             overlap = question_keywords & content_words
-            if len(overlap) >= 2:
+            if len(overlap) >= 3:
                 relevant_source_ids.append(index)
 
         if not relevant_source_ids:
