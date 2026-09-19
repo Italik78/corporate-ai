@@ -10,8 +10,8 @@ Corporate AI on NVIDIA DGX Spark GB10. GitHub repository is the source of truth.
 
 - DGX Spark GB10, 128 GB unified memory, 4 TB NVMe.
 - Ubuntu 24.04.x LTS, aarch64.
-- NVIDIA Driver 580.178.04, CUDA 13.0.
-- Docker 29.6.2, NVIDIA Container Toolkit 1.20.0.
+- NVIDIA Driver 580.x, CUDA 13.x.
+- Docker + NVIDIA Container Toolkit.
 - Internal Docker network: `ai-net`.
 - Primary LLM: Qwen3.6-35B-A3B-NVFP4.
 - Qwen3.6: context 262144, GPU utilization 0.65, KV FP8, MTP 3, tool calling enabled, thinking disabled for standard mode.
@@ -20,170 +20,89 @@ Corporate AI on NVIDIA DGX Spark GB10. GitHub repository is the source of truth.
 ## Knowledge foundation
 
 - Qwen3-Embedding-4B, 2560 dimensions, local embedding service.
-- Qdrant `corporate_knowledge`, persistent production storage.
-- Knowledge Engine provides:
+- Qdrant collection: `corporate_knowledge`.
+- Active Knowledge Engine test release: **0.3.1**.
+- Active Knowledge Engine host API: `127.0.0.1:8093`.
+- Knowledge Engine endpoints:
   - `/health`
   - `/v1/search`
   - `/v1/ingest`
   - `/v1/query`
 - End-to-end grounded RAG is validated.
-- Insufficient evidence is returned as:
-  `Няма достатъчно информация в предоставените документи.`
-- Deliberate conflicting claims are retrieved together.
-
-## Evidence Engine
-
-Evidence Engine v0.1 is implemented as a separate module and integrated into Knowledge Engine `/v1/query`.
-
-Current Knowledge Engine release under validation: **v0.1.6**
-
-Supported statuses:
-
-- `SUPPORTED`
-- `CONFLICT`
-- `INSUFFICIENT_EVIDENCE`
-
-Automated tests:
-
-- Evidence Engine: **13/13 PASS**
-- Query API: **3/3 PASS**
-
-Live validation on Knowledge Engine v0.1.6:
-
-1. SUPPORTED
-   - Relevant evidence is retrieved.
-   - LLM generates the answer.
-   - Source IDs are preserved.
-   - `grounded=true`.
-
-2. CONFLICT
-   - Conflicting relevant numeric claims are detected.
-   - The system does not silently select a winning source.
-   - The two conflicting evidence sources are returned.
-   - The LLM does not generate a final answer.
-   - `grounded=false`.
-
-3. INSUFFICIENT_EVIDENCE
-   - No sufficient evidence is retrieved.
-   - A controlled no-answer response is returned.
-   - Information is not fabricated.
-   - `grounded=false`.
-
-API contract currently exposes:
-
-- `question`
-- `answer`
-- `grounded`
-- `evidence_status`
-- `evidence_claims`
-- `evidence_reason`
-- `sources`
-
-Current limitation:
-
-- The numeric conflict detector is a candidate detector, not a final semantic conflict resolver.
-- `answerable=True` currently means that no relevant numeric conflict was detected. It does not prove complete semantic answerability.
-- Final groundedness and answerability still include the LLM layer.
-- Retrieval can return additional low-relevance chunks. Conflict handling currently returns the sources participating in the detected conflict rather than every retrieved chunk.
+- Insufficient evidence returns a controlled no-answer response.
+- Deliberate conflicting claims are retrieved together without silently selecting a winner.
 
 ## Document intelligence
 
-Universal target formats:
-
+Target formats:
 - PDF
 - DOCX / DOC
 - XLSX
 - PPTX
 - CSV
 - TXT / Markdown
-- Images
+- PNG / JPEG / TIFF
 
 Validated foundation:
-
 - PDF classifier.
 - PDF router.
 - Vision preprocessor.
 - Qwen3.6 Vision adapter.
 - Structured Vision JSON output.
-- TABLE page handling.
-- VISUAL page handling.
-- COMPLEX page handling.
+- TABLE, VISUAL and COMPLEX page handling.
 
-Next:
+Architecture decision:
+- Universal file ingestion is a separate **Document Ingestion Service**.
+- Knowledge Engine remains a normalized chunk → embedding → Qdrant/RAG service.
+- MinIO is the planned production Object Storage on **AI-DATA-01**, not on DGX Spark.
+- Original documents remain in Object Storage; Qdrant is an index, not the source of truth.
 
-- Universal ingestion orchestration.
-- Multimodal content normalization.
-- Table and visual grounding.
-- Integration with Knowledge Engine.
+New architecture document:
+- `04_KNOWLEDGE/DOCUMENT_INGESTION_SERVICE.md`
 
-## Agent and tools
+## Infrastructure
 
-Architecture target:
+Planned Data Server:
+- Role: PostgreSQL, Vector DB, Object Storage.
+- Target: 16 CPU cores, 64 GB RAM, 2 TB NVMe.
+- 10 GbE and RAID are architectural requirements.
 
-```
-Qwen3.6
-   ↓
-Agent Controller
-   ↓
-Knowledge / Files / Tools
-   ↓
-Tool Policy + Validation + Approval
-   ↓
-Document generation / actions
-```
-
-Office tools are intended for controlled Word/Excel/PowerPoint/PDF creation and reading. Write operations require human approval.
-
-Open WebUI is the primary chat/UI layer. Corporate AI Console is separate and focuses on infrastructure/application topology, health, dependencies, resources, logs and operational status.
+Current verified DGX deployment does not contain MinIO.
+No production AI-DATA-01 runtime has been verified yet.
 
 ## Current phase
 
-### PHASE 3: Evidence and Grounded Reasoning
+### PHASE 3: Knowledge / Grounded Reasoning
 
 Status: IN PROGRESS
 
 Completed:
+- Embedding and Qdrant foundation.
+- Knowledge Engine search/ingest/query.
+- SUPPORTED / CONFLICT / INSUFFICIENT_EVIDENCE handling.
+- Grounded RAG validation.
+- Knowledge Engine 0.3.1 stabilization.
+- Document Ingestion Service architecture definition.
 
-- Evidence Engine v0.1.
-- SUPPORTED / CONFLICT / INSUFFICIENT_EVIDENCE statuses.
-- Source ID preservation.
-- Conflict response without selecting a winning source.
-- Integration into Knowledge Engine `/v1/query`.
-- Evidence Engine unit tests: 13/13 PASS.
-- Query API tests: 3/3 PASS.
-- Knowledge Engine v0.1.6 container rebuild.
-- Health and OpenAPI version validation.
-- Live validation of all three main scenarios.
+Immediate next steps:
+1. Implement Document Ingestion Service skeleton.
+2. TXT/Markdown parser.
+3. Normalized document model.
+4. SHA-256 deduplication/version foundation.
+5. Deterministic chunker.
+6. Integration with Knowledge Engine `/v1/ingest`.
+7. End-to-end TXT/Markdown test.
+8. Then DOCX/XLSX/PPTX/CSV.
+9. Then PDF/OCR/Vision integration.
 
-Next:
+## Runtime cleanup note
 
-1. Claims and provenance model.
-2. Partial grounded answers for mixed questions.
-3. Conditional reranking / evidence fusion.
-4. Improve semantic conflict detection.
-5. Expand evidence evaluation beyond numeric conflicts.
-
-## Current blockers
-
-No blocker for the current development path.
-
-The next work consists of engineering extensions to an already working foundation.
-
-## Immediate next steps
-
-1. Claims and provenance model.
-2. Universal document ingestion orchestration.
-3. Multimodal and table grounding.
-4. Retrieval quality improvements.
-5. Agent Controller and Tool Policy.
-6. Office Tool Gateway.
-7. Open WebUI and Corporate AI Console integration.
-8. Security hardening.
-9. Production readiness.
+Older Knowledge Engine test containers remain on the DGX during validation. They are not removed until the active 0.3.1 path is fully accepted.
 
 ## Project rules
 
-- Status is changed to DONE / COMPLETE only after real technical validation.
+- Status changes to DONE/COMPLETE only after real technical validation.
 - Documentation, plans and configuration alone do not count as implemented functionality.
-- Old tasks are not marked DONE without verification against the current architecture.
+- Original documents are not stored in Qdrant.
+- Document content is untrusted input and never overrides system/tool policies.
 - GitHub is the source of truth for project documentation.
