@@ -1,63 +1,69 @@
 # ROADMAP
 
 ## Phase 1 — Baseline
+
 Verify DGX post-update; inventory containers, images, volumes, networks and configs; preserve existing data.
 
 **Status: COMPLETE**
 
 ## Phase 2 — Runtime
+
 Declarative service definitions; Qwen3.6; health checks; resource policies.
 
 **Status: COMPLETE**
 
 ## Phase 3 — Knowledge
-Embedding; Qdrant; reranker; universal ingestion; RAG; evidence evaluation; graph evaluation.
+
+Embedding; Qdrant; Knowledge Engine; RAG; evidence evaluation; universal ingestion.
 
 **Status: IN PROGRESS**
 
 Completed:
 - Qwen3-Embedding-4B production configuration and API validation.
-- Qdrant production collection and persistence validation.
-- Knowledge Engine v0.x with search, ingest, health and end-to-end RAG query.
+- Qdrant `corporate_knowledge` collection and persistence validation.
+- Knowledge Engine with search, ingest, health and end-to-end RAG query.
 - Grounded positive query and insufficient-evidence negative query.
 - Initial conflict retrieval test.
-- Evidence Engine v0.1 as a separate module.
-- Explicit statuses: SUPPORTED / CONFLICT / INSUFFICIENT_EVIDENCE.
-- Evidence claims with source IDs for detected numeric conflicts.
-- Evidence Engine integration into `/v1/query`.
-- Knowledge Engine v0.1.6 rebuild and runtime validation.
-- Evidence Engine tests: 13/13 PASS.
-- Query API tests: 3/3 PASS.
-- Live validation of SUPPORTED, CONFLICT and INSUFFICIENT_EVIDENCE.
+- Evidence Engine with SUPPORTED / CONFLICT / INSUFFICIENT_EVIDENCE.
+- Evidence claims with source IDs.
+- Evidence integration into `/v1/query`.
+- Knowledge Engine 0.3.1 test runtime validation.
+- Normalized RAG response contract.
+- Git hygiene for runtime data and backup files.
 
 Current limitation:
-- Conflict detection is currently a numeric candidate detector, not a final semantic conflict resolver.
-- Retrieval can return additional low-relevance chunks, so retrieval quality remains a separate task.
+- Conflict detection is a numeric candidate detector, not a final semantic conflict resolver.
+- Retrieval quality and reranking remain separate tasks.
+- `/v1/ingest` accepts normalized content; universal file ingestion is not implemented there.
 
 Next:
-1. Claims and provenance model.
-2. Partial-answer handling for mixed questions.
-3. Conditional reranking and evidence fusion.
-4. Improve semantic conflict detection.
-5. Evaluate knowledge graph for procedural/organizational relationships.
+1. Document Ingestion Service.
+2. TXT/Markdown end-to-end ingestion.
+3. Claims/provenance completion.
+4. Partial-answer handling.
+5. Conditional reranking/evidence fusion.
+6. Improve semantic conflict detection.
+7. Evaluate knowledge graph for procedural/organizational relationships.
 
 ## Phase 4 — Multimodal
+
 Vision; PDF/image pipeline; structured extraction.
 
 **Status: FOUNDATION VALIDATED / INTEGRATION IN PROGRESS**
 
 Completed:
 - PDF classifier/router/preprocessor pipeline prototypes.
-- Qwen3.6 vision API validation.
-- Production vision JSON Schema validation.
-- Test images and page-type classification available.
+- Qwen3.6 Vision API validation.
+- Structured Vision JSON validation.
+- TABLE, VISUAL and COMPLEX page handling.
 
 Next:
-- Integrate document intelligence into universal ingestion.
+- Integrate PDF/OCR/Vision into Document Ingestion Service.
 - Ground visual/table extraction into Knowledge Engine.
-- Add confidence and uncertainty propagation.
+- Propagate confidence and uncertainty.
 
 ## Phase 5 — Agent
+
 Gateway; tool policy; Office tools; approval workflow; document lifecycle.
 
 **Status: FOUNDATION / NOT YET INTEGRATED**
@@ -71,6 +77,7 @@ Target:
 - Traceability matrix and provenance.
 
 ## Phase 6 — UI
+
 Open WebUI/Pipe; streaming/status events; Corporate AI Console.
 
 **Status: FOUNDATION**
@@ -80,6 +87,7 @@ Open WebUI/Pipe; streaming/status events; Corporate AI Console.
 - Avoid a parallel custom chat UI.
 
 ## Phase 7 — Production
+
 Security; backups; recovery; evaluation; observability; performance/resource tuning.
 
 **Status: NOT COMPLETE**
