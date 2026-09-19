@@ -91,11 +91,12 @@ async def health():
 async def ingest(request: IngestRequest):
     content = request.content.strip()
 
-    point_id = hashlib.sha256(
-        f"{request.document_id}:{request.source_file}:{request.page}:{content}".encode(
-            "utf-8"
-        )
-    ).hexdigest()[:32]
+    identity = (
+        f"{request.document_id}:{request.chunk_id}"
+        if request.chunk_id
+        else f"{request.document_id}:{request.source_file}:{request.page}:{content}"
+    )
+    point_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
 
     payload = {
         "document_id": request.document_id,
@@ -103,10 +104,13 @@ async def ingest(request: IngestRequest):
         "page": request.page,
         "page_type": request.page_type,
         "chunk_type": request.chunk_type,
+        "chunk_id": request.chunk_id,
         "section": request.section,
         "confidence": request.confidence,
         "content": content,
-        "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        "content_hash": hashlib.sha256(
+            content.encode("utf-8")
+        ).hexdigest(),
     }
 
     try:
