@@ -14,6 +14,7 @@ class KnowledgeEngineClient:
             "page":chunk.page,
             "page_type":chunk.page_type,
             "chunk_type":chunk.chunk_type,
+            "chunk_id":chunk.chunk_id,
             "section":chunk.section,
             "confidence":chunk.confidence,
         }
