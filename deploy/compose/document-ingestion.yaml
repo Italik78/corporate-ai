@@ -1,0 +1,25 @@
+services:
+  document-ingestion:
+    build:
+      context: ../../services/document-ingestion
+    container_name: corporate-ai-document-ingestion
+    restart: unless-stopped
+    environment:
+      INGESTION_PORT: "8095"
+      INGESTION_KNOWLEDGE_ENGINE_URL: "http://corporate-ai-knowledge-engine-0.3.1-test:8090"
+      INGESTION_MAX_FILE_SIZE_MB: "25"
+    ports:
+      - "127.0.0.1:8095:8095"
+    networks:
+      - ai-net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+
+networks:
+  ai-net:
+    external: true
