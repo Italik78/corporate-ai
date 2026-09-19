@@ -1,0 +1,28 @@
+services:
+  knowledge-engine:
+    build:
+      context: ../../services/knowledge-engine
+    container_name: corporate-ai-knowledge-engine
+    restart: unless-stopped
+    environment:
+      EMBEDDING_BASE_URL: "http://corporate-ai-embedding-test:8001/v1"
+      EMBEDDING_MODEL: "qwen3-embedding-4b"
+      LLM_BASE_URL: "http://corporate-ai-qwen36:8000/v1"
+      LLM_MODEL: "qwen36"
+      QDRANT_URL: "http://corporate-ai-qdrant:6333"
+      COLLECTION_NAME: "corporate_knowledge"
+    ports:
+      - "127.0.0.1:8093:8090"
+    networks:
+      - ai-net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+
+networks:
+  ai-net:
+    external: true
