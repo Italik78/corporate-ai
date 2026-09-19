@@ -68,28 +68,28 @@ class EvidenceEngine:
             unit = {"eur":"евро","лв":"лева","лв.":"лева","ден":"дни",
                     "час":"часа","%":"процента"}.get(unit, unit)
             sentence = self._sentence_for_position(text, match.start())
+            sentence_lower = sentence.lower()
             words = {
                 self._normalize_word(w)[:7]
-                for w in self.WORD_PATTERN.findall(sentence.lower())
+                for w in self.WORD_PATTERN.findall(sentence_lower)
                 if w not in self.STOPWORDS
             }
+            overlap = question_keywords & words
+            workplace_context = (
+                "извън" not in question_keywords
+                or (
+                    "извън" in sentence_lower
+                    and any(
+                        term in sentence_lower
+                        for term in ("място", "месторабот", "работ")
+                    )
+                )
+            )
             contexts.setdefault(unit, []).append({
                 "number": number,
                 "sentence": sentence,
-                "overlap": question_keywords & words,
-                "relevant": (
-                    len(question_keywords & words) >= 2
-                    and (
-                        "извън" not in question_keywords
-                        or (
-                            "извън" in words
-                            and any(
-                                word.startswith(("мяст", "местораб", "работ"))
-                                for word in words
-                            )
-                        )
-                    )
-                ),
+                "overlap": overlap,
+                "relevant": len(overlap) >= 2 and workplace_context,
             })
         return contexts
 
