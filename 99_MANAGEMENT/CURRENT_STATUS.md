@@ -35,35 +35,56 @@ Corporate AI on NVIDIA DGX Spark GB10. GitHub repository is the source of truth.
 
 Evidence Engine v0.1 is implemented as a separate module and integrated into Knowledge Engine `/v1/query`.
 
+Current Knowledge Engine release under validation: **v0.1.6**
+
 Supported statuses:
 
 - `SUPPORTED`
 - `CONFLICT`
 - `INSUFFICIENT_EVIDENCE`
 
-Validated scenarios:
+Automated tests:
+
+- Evidence Engine: **13/13 PASS**
+- Query API: **3/3 PASS**
+
+Live validation on Knowledge Engine v0.1.6:
 
 1. SUPPORTED
    - Relevant evidence is retrieved.
    - LLM generates the answer.
    - Source IDs are preserved.
+   - `grounded=true`.
 
 2. CONFLICT
    - Conflicting relevant numeric claims are detected.
    - The system does not silently select a winning source.
-   - Relevant evidence sources are returned.
+   - The two conflicting evidence sources are returned.
    - The LLM does not generate a final answer.
+   - `grounded=false`.
 
 3. INSUFFICIENT_EVIDENCE
-   - Evidence is insufficient.
+   - No sufficient evidence is retrieved.
    - A controlled no-answer response is returned.
    - Information is not fabricated.
+   - `grounded=false`.
+
+API contract currently exposes:
+
+- `question`
+- `answer`
+- `grounded`
+- `evidence_status`
+- `evidence_claims`
+- `evidence_reason`
+- `sources`
 
 Current limitation:
 
 - The numeric conflict detector is a candidate detector, not a final semantic conflict resolver.
 - `answerable=True` currently means that no relevant numeric conflict was detected. It does not prove complete semantic answerability.
 - Final groundedness and answerability still include the LLM layer.
+- Retrieval can return additional low-relevance chunks. Conflict handling currently returns the sources participating in the detected conflict rather than every retrieved chunk.
 
 ## Document intelligence
 
@@ -128,16 +149,19 @@ Completed:
 - Source ID preservation.
 - Conflict response without selecting a winning source.
 - Integration into Knowledge Engine `/v1/query`.
+- Evidence Engine unit tests: 13/13 PASS.
+- Query API tests: 3/3 PASS.
+- Knowledge Engine v0.1.6 container rebuild.
+- Health and OpenAPI version validation.
 - Live validation of all three main scenarios.
 
 Next:
 
-1. Expand Evidence Engine unit tests.
-2. Finalize Evidence API contract.
-3. Add claims and provenance model.
-4. Add partial grounded answers for mixed questions.
-5. Add conditional reranking / evidence fusion.
-6. Improve semantic conflict detection.
+1. Claims and provenance model.
+2. Partial grounded answers for mixed questions.
+3. Conditional reranking / evidence fusion.
+4. Improve semantic conflict detection.
+5. Expand evidence evaluation beyond numeric conflicts.
 
 ## Current blockers
 
@@ -147,7 +171,7 @@ The next work consists of engineering extensions to an already working foundatio
 
 ## Immediate next steps
 
-1. Evidence Engine test and API contract expansion.
+1. Claims and provenance model.
 2. Universal document ingestion orchestration.
 3. Multimodal and table grounding.
 4. Retrieval quality improvements.
