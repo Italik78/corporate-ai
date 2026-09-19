@@ -40,6 +40,7 @@ class IngestRequest(BaseModel):
     page: int | None = None
     page_type: str = "TEXT"
     chunk_type: str = "text"
+    chunk_id: str | None = None
     section: str | None = None
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
