@@ -85,11 +85,19 @@ class EvidenceEngine:
                     )
                 )
             )
+            # When the question explicitly asks about a value outside the
+            # workplace, the phrase itself is the strongest deterministic
+            # relevance signal. Do not let morphological normalization hide
+            # a genuine numeric conflict.
+            if "извън" in question_keywords:
+                relevant = workplace_context
+            else:
+                relevant = len(overlap) >= 2
             contexts.setdefault(unit, []).append({
                 "number": number,
                 "sentence": sentence,
                 "overlap": overlap,
-                "relevant": len(overlap) >= 2 and workplace_context,
+                "relevant": relevant,
             })
         return contexts
 
