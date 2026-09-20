@@ -115,3 +115,14 @@ Focus:
 - resource contention tests.
 - security hardening.
 - deployment reproducibility.
+
+
+### Phase A.2 — Document Metadata & Version Foundation
+- [x] PostgreSQL metadata registry
+- [x] SHA-256 deduplication
+- [x] document versions and lifecycle
+- [x] supersession relationships
+- [x] effective dates / project / access scope metadata
+- [x] metadata propagation to Qdrant
+- [x] version/lifecycle filters in Knowledge Engine
+- [ ] DGX integration and end-to-end version transition validation
