@@ -2,6 +2,26 @@ import json
 
 NO_ANSWER = "Няма достатъчно информация в предоставените документи."
 
+def normalize_source_ids(value) -> list[int]:
+    """Normalize model-emitted provenance IDs to one canonical representation."""
+    if not isinstance(value, list):
+        return []
+
+    normalized = []
+    for source_id in value:
+        if isinstance(source_id, bool):
+            continue
+        try:
+            normalized_id = int(source_id)
+        except (TypeError, ValueError):
+            continue
+        if normalized_id <= 0:
+            continue
+        normalized.append(normalized_id)
+
+    return list(dict.fromkeys(normalized))
+
+
 def build_messages(question: str, results) -> list[dict]:
     blocks = []
     for index, result in enumerate(results, start=1):
@@ -16,7 +36,14 @@ def build_messages(question: str, results) -> list[dict]:
             result.content,
         ]))
     context = "\n\n".join(blocks)
-    system = """Ти си корпоративен AI асистент. Отговаряй САМО въз основа на предоставените източници. Не измисляй факти. Отговаряй на български. Всеки факт трябва да има source_ids. Ако информацията липсва, използвай текста Няма достатъчно информация в предоставените документи. Върни само валиден JSON с answerable, answer, source_ids, claims и unanswered_parts."""
+    system = """Ти си корпоративен AI асистент. Отговаряй САМО въз основа на предоставените източници. Не измисляй факти. Отговаряй на български. Всеки факт трябва да има source_ids. Ако информацията липсва, използвай текста Няма достатъчно информация в предоставените документи. Върни само валиден JSON с answerable, answer, source_ids, claims и unanswered_parts.
+
+PROVENANCE CONTRACT:
+- source_ids съдържа само идентификатори на предоставените SOURCE_ID.
+- source_ids трябва да бъдат числа, например [1, 2].
+- Всеки claim трябва да има source_ids, които сочат към предоставени SOURCE_ID.
+- Не измисляй source_id.
+"""
     user = f"""ВЪПРОС:\n{question}\n\nПРЕДОСТАВЕНИ ИЗТОЧНИЦИ:\n{context}\n\nВърни само валиден JSON."""
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
