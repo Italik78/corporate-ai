@@ -196,9 +196,20 @@ Return ONLY JSON: {"route":"GENERAL"} or {"route":"RAG"}.
         temperature=0.0,
         max_tokens=40,
     )
-    match = re.search(r'\{\s*"route"\s*:\s*"(GENERAL|RAG)"\s*\}', raw.upper())
+    normalized = raw.strip().upper()
+    match = re.search(r'\{\s*"ROUTE"\s*:\s*"(GENERAL|RAG)"\s*\}', normalized)
     if match:
         return match.group(1).lower(), "llm_router"
+
+    # Qwen may wrap the JSON in markdown or emit a short plain-text route.
+    fenced = re.search(r'\`\`\`(?:JSON)?\s*\{\s*"ROUTE"\s*:\s*"(GENERAL|RAG)"\s*\}\s*\`\`\`', normalized)
+    if fenced:
+        return fenced.group(1).lower(), "llm_router"
+
+    route_tokens = re.findall(r'\\b(GENERAL|RAG)\\b', normalized)
+    if len(route_tokens) == 1:
+        return route_tokens[0].lower(), "llm_router"
+
     return "rag", "router_fallback"
 
 
