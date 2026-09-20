@@ -58,7 +58,30 @@ def parse_decision(content: str) -> dict:
     data.setdefault("unanswered_parts", [])
     if not isinstance(data["answerable"], bool): raise ValueError("answerable must be boolean")
     if not isinstance(data["answer"], str): raise ValueError("answer must be string")
-    if not isinstance(data["source_ids"], list): raise ValueError("source_ids must be list")
-    if not isinstance(data["claims"], list): raise ValueError("claims must be list")
     if not isinstance(data["unanswered_parts"], list): raise ValueError("unanswered_parts must be list")
+
+    # Canonicalize provenance once, immediately after parsing.
+    data["source_ids"] = normalize_source_ids(data["source_ids"])
+
+    if not isinstance(data["claims"], list): raise ValueError("claims must be list")
+
+    normalized_claims = []
+    for claim in data["claims"]:
+        if isinstance(claim, str):
+            normalized_claims.append({
+                "text": claim.strip(),
+                "source_ids": list(data["source_ids"]),
+            })
+            continue
+
+        if not isinstance(claim, dict):
+            continue
+
+        normalized_claim = dict(claim)
+        normalized_claim["source_ids"] = normalize_source_ids(
+            normalized_claim.get("source_ids", [])
+        )
+        normalized_claims.append(normalized_claim)
+
+    data["claims"] = normalized_claims
     return data
