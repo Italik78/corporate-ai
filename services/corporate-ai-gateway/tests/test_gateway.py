@@ -10,11 +10,12 @@ from app.main import (
     metadata_from_rag,
     source_context,
     valid_source_citations,
+    routing_context,
 )
 
 
 def test_version():
-    assert VERSION == "0.3.0"
+    assert VERSION == "0.3.1"
 
 
 def test_internal_question_routes_to_rag():
@@ -76,3 +77,15 @@ def test_citation_validation_rejects_unknown_source():
 
 def test_citation_validation_accepts_known_source():
     assert valid_source_citations("Твърдение [1].", 2)
+
+
+def test_routing_context_uses_user_turns_only():
+    messages = [
+        type("M", (), {"role": "user", "content": "Каква е нашата политика за отпуските?"})(),
+        type("M", (), {"role": "assistant", "content": "Измислен асистентски отговор."})(),
+        type("M", (), {"role": "user", "content": "А при нас как е?"})(),
+    ]
+    context = routing_context(messages, "А при нас как е?")
+    assert "нашата политика" in context
+    assert "А при нас как е?" in context
+    assert "Измислен асистентски отговор" not in context
