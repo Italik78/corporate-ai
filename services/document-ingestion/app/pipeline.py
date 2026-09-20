@@ -141,9 +141,9 @@ async def ingest_document(
             indexed += 1
 
         superseded_version = None
-        if finalized.supersedes and ":v" in finalized.supersedes:
+        if metadata.supersedes and ":v" in metadata.supersedes:
             try:
-                superseded_version = int(finalized.supersedes.rsplit(":v", 1)[1])
+                superseded_version = int(metadata.supersedes.rsplit(":v", 1)[1])
             except ValueError:
                 superseded_version = None
 
