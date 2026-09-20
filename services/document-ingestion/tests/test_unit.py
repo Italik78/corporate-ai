@@ -115,4 +115,8 @@ def test_chunk_carries_version_metadata():
     doc.metadata.effective_from = "2026-10-01"
     chunks = chunk_document(doc)
     assert chunks[0].document_id == "d1"
+    assert chunks[0].version == 2
+    assert chunks[0].document_date == "2026-09-20"
+    assert chunks[0].effective_from == "2026-10-01"
+    assert chunks[0].lifecycle_status.value == "INGESTING"
     assert chunks[0].content
