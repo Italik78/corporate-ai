@@ -348,6 +348,8 @@ async def query(request: RAGQuery):
                 Source(
                     document_id=result.document_id,
                     source_file=result.source_file,
+                    version=result.version,
+                    lifecycle_status=result.lifecycle_status,
                     page=result.page,
                     chunk_id=result.chunk_id,
                     score=result.score,
