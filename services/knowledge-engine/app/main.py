@@ -140,6 +140,31 @@ async def ingest(request: IngestRequest):
     )
 
 
+@app.post("/v1/documents/lifecycle")
+async def update_document_lifecycle(
+    document_id: str,
+    version: int,
+    lifecycle_status: str,
+):
+    try:
+        qdrant.set_lifecycle_status(
+            document_id=document_id,
+            version=version,
+            lifecycle_status=lifecycle_status,
+        )
+        return {
+            "status": "ok",
+            "document_id": document_id,
+            "version": version,
+            "lifecycle_status": lifecycle_status,
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"component": "knowledge-engine", "error": str(exc)},
+        ) from exc
+
+
 @app.post("/v1/search", response_model=SearchResponse)
 async def search(request: SearchRequest):
     try:
@@ -254,6 +279,8 @@ async def query(request: RAGQuery):
                     Source(
                         document_id=result.document_id,
                         source_file=result.source_file,
+                        version=result.version,
+                        lifecycle_status=result.lifecycle_status,
                         page=result.page,
                         chunk_id=result.chunk_id,
                         score=result.score,
