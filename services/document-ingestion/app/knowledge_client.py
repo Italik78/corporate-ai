@@ -32,6 +32,24 @@ class KnowledgeEngineClient:
             r.raise_for_status()
             return r.json()
 
+    async def set_lifecycle_status(
+        self,
+        document_id: str,
+        version: int,
+        lifecycle_status: str,
+    ) -> dict:
+        async with httpx.AsyncClient(timeout=settings.ingest_timeout_seconds) as client:
+            r = await client.post(
+                f"{self.base_url}/v1/documents/lifecycle",
+                params={
+                    "document_id": document_id,
+                    "version": version,
+                    "lifecycle_status": lifecycle_status,
+                },
+            )
+            r.raise_for_status()
+            return r.json()
+
     async def health(self) -> bool:
         try:
             async with httpx.AsyncClient(timeout=5) as client:
