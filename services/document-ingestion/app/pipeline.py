@@ -120,6 +120,11 @@ async def ingest_document(
         registered_version = metadata.version
         jobs[ingestion_id]["version"] = registered_version
 
+        # register_version() may resolve an automatically assigned version and
+        # populate supersedes metadata. Chunk IDs must use the resolved version,
+        # not the initially requested version captured in the original document.
+        doc.metadata = metadata
+
         jobs[ingestion_id]["status"] = DocumentStatus.DEDUPLICATING
         jobs[ingestion_id]["status"] = DocumentStatus.CHUNKING
         chunks = chunk_document(doc)
