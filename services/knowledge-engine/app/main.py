@@ -101,6 +101,13 @@ async def ingest(request: IngestRequest):
     payload = {
         "document_id": request.document_id,
         "source_file": request.source_file,
+        "version": request.version,
+        "lifecycle_status": request.lifecycle_status,
+        "document_date": request.document_date,
+        "effective_from": request.effective_from,
+        "effective_to": request.effective_to,
+        "project_id": request.project_id,
+        "access_scope": request.access_scope,
         "page": request.page,
         "page_type": request.page_type,
         "chunk_type": request.chunk_type,
@@ -142,6 +149,9 @@ async def search(request: SearchRequest):
             vector=vector,
             limit=request.top_k,
             score_threshold=request.score_threshold,
+            document_id=request.document_id,
+            version=request.version,
+            lifecycle_status=request.lifecycle_status,
         )
 
         output = []
@@ -152,6 +162,13 @@ async def search(request: SearchRequest):
                     score=float(result.score),
                     document_id=payload.get("document_id"),
                     source_file=payload.get("source_file"),
+                    version=payload.get("version"),
+                    lifecycle_status=payload.get("lifecycle_status"),
+                    document_date=payload.get("document_date"),
+                    effective_from=payload.get("effective_from"),
+                    effective_to=payload.get("effective_to"),
+                    project_id=payload.get("project_id"),
+                    access_scope=payload.get("access_scope"),
                     page=payload.get("page"),
                     page_type=payload.get("page_type"),
                     chunk_type=payload.get("chunk_type"),
@@ -181,6 +198,9 @@ async def query(request: RAGQuery):
             vector=vector,
             limit=request.top_k,
             score_threshold=request.score_threshold,
+            document_id=request.document_id,
+            version=request.version,
+            lifecycle_status=request.lifecycle_status,
         )
 
         if not results:
@@ -204,6 +224,13 @@ async def query(request: RAGQuery):
                     score=float(result.score),
                     document_id=payload.get("document_id"),
                     source_file=payload.get("source_file"),
+                    version=payload.get("version"),
+                    lifecycle_status=payload.get("lifecycle_status"),
+                    document_date=payload.get("document_date"),
+                    effective_from=payload.get("effective_from"),
+                    effective_to=payload.get("effective_to"),
+                    project_id=payload.get("project_id"),
+                    access_scope=payload.get("access_scope"),
                     page=payload.get("page"),
                     page_type=payload.get("page_type"),
                     chunk_type=payload.get("chunk_type"),
