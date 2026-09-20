@@ -127,7 +127,7 @@ def _extract_csv(filename: str, data: bytes) -> list[NormalizedBlock]:
 
     sample = text[:8192]
     try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",;\\t|")
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
     except csv.Error:
         dialect = csv.excel
 
