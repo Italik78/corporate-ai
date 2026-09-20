@@ -23,6 +23,24 @@ class QdrantStore:
             wait=True,
         )
 
+    def set_lifecycle_status(
+        self,
+        document_id: str,
+        version: int,
+        lifecycle_status: str,
+    ) -> None:
+        self.client.set_payload(
+            collection_name=self.collection,
+            payload={"lifecycle_status": lifecycle_status},
+            points=Filter(
+                must=[
+                    FieldCondition(key="document_id", match=MatchValue(value=document_id)),
+                    FieldCondition(key="version", match=MatchValue(value=version)),
+                ]
+            ),
+            wait=True,
+        )
+
     def search(
         self,
         vector: list[float],
