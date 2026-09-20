@@ -139,7 +139,7 @@ def heuristic_route(question: str) -> str | None:
     return None
 
 
-async def routing_context(messages: list[ChatMessage], question: str) -> str:
+def routing_context(messages: list[ChatMessage], question: str) -> str:
     parts = []
     for message in reversed(messages):
         if message.role != "user":
@@ -278,11 +278,11 @@ async def synthesize_grounded_answer(
 ) -> tuple[str, bool]:
     sources = result.get("sources")
     if not isinstance(sources, list) or not sources:
-        return "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор.", False, False
+        return "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор.", False
 
     evidence = source_context(sources)
     if not evidence:
-        return "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор."
+        return "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор.", False
 
     system = """You are the grounded-answer component of Corporate AI.
 
