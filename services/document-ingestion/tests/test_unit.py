@@ -1,7 +1,10 @@
+import csv
+import io
+
 import pytest
 
 from app.security import sha256_bytes, validate_filename, validate_extension
-from app.extractors import extract_text
+from app.extractors import extract_document, extract_text
 from app.chunker import chunk_document
 from app.models import DocumentMetadata, NormalizedDocument
 
@@ -127,3 +130,86 @@ def test_chunk_carries_version_metadata():
     assert chunks[0].effective_from == "2026-10-01"
     assert chunks[0].lifecycle_status.value == "INGESTING"
     assert chunks[0].content
+
+
+def test_csv_extraction():
+    data = "Име;Количество;Цена\nЛаптоп;2;1500\nМонитор;3;500\n".encode()
+    blocks = extract_document("items.csv", data)
+    assert len(blocks) == 1
+    assert blocks[0].block_type == "table"
+    assert "Име | Количество | Цена" in blocks[0].content
+    assert "Лаптоп | 2 | 1500" in blocks[0].content
+    assert blocks[0].provenance["source_format"] == "csv"
+
+
+def test_docx_extraction():
+    from docx import Document
+
+    buffer = io.BytesIO()
+    document = Document()
+    document.add_heading("Командировки", level=1)
+    document.add_paragraph("Дневните командировъчни са 40 EUR.")
+    table = document.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "Разход"
+    table.cell(0, 1).text = "Лимит"
+    table.cell(1, 0).text = "Хотел"
+    table.cell(1, 1).text = "100 EUR"
+    document.save(buffer)
+
+    blocks = extract_document("policy.docx", buffer.getvalue())
+    assert len(blocks) == 3
+    assert blocks[0].block_type == "heading"
+    assert blocks[1].section == "Командировки"
+    assert blocks[2].block_type == "table"
+    assert "Разход | Лимит" in blocks[2].content
+    assert blocks[2].provenance["source_format"] == "docx"
+
+
+def test_xlsx_extraction():
+    from openpyxl import Workbook
+
+    buffer = io.BytesIO()
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Бюджет"
+    worksheet.append(["Артикул", "Количество", "Цена"])
+    worksheet.append(["Лаптоп", 2, 1500])
+    worksheet.append(["Монитор", 3, 500])
+    workbook.save(buffer)
+
+    blocks = extract_document("budget.xlsx", buffer.getvalue())
+    assert len(blocks) == 1
+    assert blocks[0].block_type == "table"
+    assert blocks[0].section == "Бюджет"
+    assert "Лаптоп | 2 | 1500" in blocks[0].content
+    assert blocks[0].provenance["sheet"] == "Бюджет"
+
+
+def test_pptx_extraction():
+    from pptx import Presentation
+
+    buffer = io.BytesIO()
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    title = slide.shapes.title
+    title.text = "Проект"
+    textbox = slide.shapes.add_textbox(1000000, 1000000, 5000000, 1000000)
+    textbox.text = "Бюджетът е 100 000 EUR."
+    table = slide.shapes.add_table(2, 2, 1000000, 2500000, 5000000, 2000000).table
+    table.cell(0, 0).text = "Разход"
+    table.cell(0, 1).text = "Сума"
+    table.cell(1, 0).text = "Хардуер"
+    table.cell(1, 1).text = "50 000 EUR"
+
+    blocks = extract_document("brief.pptx", buffer.getvalue())
+    assert len(blocks) == 3
+    assert blocks[0].block_type == "heading"
+    assert blocks[1].page == 1
+    assert blocks[2].block_type == "table"
+    assert "Хардуер | 50 000 EUR" in blocks[2].content
+    assert blocks[2].provenance["slide"] == 1
+
+
+def test_unsupported_extractor():
+    with pytest.raises(ValueError, match="UNSUPPORTED_FILE_TYPE"):
+        extract_document("image.png", b"data")
