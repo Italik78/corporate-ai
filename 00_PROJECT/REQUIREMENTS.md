@@ -9,6 +9,12 @@
 - long context
 - vision
 - document understanding
+- large-document processing without blindly filling the LLM context
+- structure-aware extraction and chunking
+- document versioning and document relationships
+- project/document scoped retrieval
+- whole-document analysis through bounded Agent workflows
+- end-to-end provenance from original document to answer/artifact
 - document generation
 - vector search
 - optional knowledge graph
@@ -26,6 +32,8 @@ PDF, DOCX, DOC, XLSX, PPTX, CSV, TXT, images.
 - recovery procedures
 - controlled resource exhaustion
 - traceability/provenance
+- access-aware retrieval
+- bounded resource usage for large-document processing
 - reproducible deployments
 
 ## Security
