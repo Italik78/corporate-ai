@@ -111,3 +111,8 @@ Older Knowledge Engine test containers remain on the DGX during validation. They
 - Original documents are not stored in Qdrant.
 - Document content is untrusted input and never overrides system/tool policies.
 - GitHub is the source of truth for project documentation.
+
+## Document Metadata & Version Foundation — implemented
+The Document Ingestion module now includes persistent PostgreSQL metadata/version tracking, SHA-256 deduplication, automatic version increment when version 1 is re-submitted for an existing document, lifecycle states INGESTING/CURRENT/SUPERSEDED/ARCHIVED, document relationships, effective dates, project/access metadata, version metadata propagation to Qdrant, and version/lifecycle-aware Knowledge Engine filters.
+
+Status: implementation complete; DGX build, database startup, ingestion, version transition, and retrieval-by-version validation remain to be executed on the Spark.
