@@ -33,3 +33,6 @@
 - Negative query correctly returns the controlled no-answer response.
 - Retrieval of a deliberate 60 EUR / 40 EUR conflict validated.
 - Candidate numeric conflict detector validated as a prototype, but deliberately not integrated into production query flow yet.
+
+## 19. Document Metadata and Version Foundation
+The Document Ingestion module uses PostgreSQL as the authoritative metadata/version registry. Qdrant receives the retrieval-relevant metadata as payload and supports document/version/lifecycle filtering. A new successful version becomes CURRENT only after indexing; the previous CURRENT version becomes SUPERSEDED. Failed or incomplete ingestions are not promoted to CURRENT.
