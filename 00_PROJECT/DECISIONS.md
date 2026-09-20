@@ -36,19 +36,12 @@
 29. A self-hosted SearXNG deployment is the first candidate for controlled web search; a hosted search provider remains an alternative if quality/reliability requires it.
 30. Documentation and plans are not implementation: Open WebUI integration and Web Search become complete only after DGX runtime validation.
 
-## Current validation checkpoint
+## 2026-09-20 — Corporate Information System direction
 
-- Qwen3.6 production configuration validated: 262144 context, GPU utilization 0.65, KV FP8, tool calling enabled.
-- Qwen3.6 vision request validated.
-- Vision JSON Schema validated.
-- Qwen3-Embedding-4B local API validated with 2560-dimensional vectors and semantic similarity test.
-- Qdrant production collection `corporate_knowledge` validated.
-- Knowledge Engine health, search, ingest and end-to-end RAG query validated.
-- Positive grounded RAG query validated.
-- Negative query correctly returns the controlled no-answer response.
-- Retrieval of a deliberate 60 EUR / 40 EUR conflict validated.
-- Candidate numeric conflict detector validated as a prototype, but deliberately not integrated into production query flow yet.
-
-## 19. Document Metadata and Version Foundation
-
-The Document Ingestion module uses PostgreSQL as the authoritative metadata/version registry. Qdrant receives the retrieval-relevant metadata as payload and supports document/version/lifecycle filtering. A new successful version becomes CURRENT only after indexing; the previous CURRENT version becomes SUPERSEDED. Failed or incomplete ingestions are not promoted to CURRENT.
+31. The product target is a **Corporate Information System**. Open WebUI is the primary user workspace, not merely a chat frontend.
+32. Use Open WebUI capabilities extensively where they improve the user experience: Folders/workspaces, System Prompts, Knowledge, reusable Models, Skills, Tools, Filters, OpenAPI, MCP and Web Search.
+33. Corporate AI remains authoritative for document ingestion, metadata/versioning, access policy, embeddings, retrieval policy, evidence, provenance, Agent orchestration and business/security-critical tools.
+34. Open WebUI Knowledge must not silently become a second authoritative knowledge store. Where it indexes or retrieves Corporate AI knowledge, it must either use the authoritative Corporate AI retrieval path or a validated compatible external index path.
+35. Large-document understanding must support both retrieval-first questions and planned/agentic whole-document analysis. Full Context is a bounded capability, not the default strategy for arbitrary large documents.
+36. Document understanding is a first-class capability: preserve document structure, tables, pages, sections, versions, relationships and provenance instead of reducing documents to anonymous text chunks.
+37. The implementation process is command-by-command on the DGX with real runtime validation. Each milestone is marked complete only after technical acceptance.
