@@ -65,7 +65,10 @@ class VersionConflictError(MetadataError):
 
 async def initialize_metadata() -> None:
     async with await psycopg.AsyncConnection.connect(settings.metadata_database_url) as conn:
-        await conn.execute(SCHEMA_SQL)
+        for statement in SCHEMA_SQL.split(";"):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(statement)
 
 
 async def health() -> bool:
