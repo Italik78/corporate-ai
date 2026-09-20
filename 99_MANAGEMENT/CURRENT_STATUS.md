@@ -1,6 +1,6 @@
 # CURRENT STATUS
 
-**Checkpoint:** 2026-09-19
+**Checkpoint:** 2026-09-20
 
 ## Project
 
@@ -57,8 +57,11 @@ Architecture decision:
 - MinIO is the planned production Object Storage on **AI-DATA-01**, not on DGX Spark.
 - Original documents remain in Object Storage; Qdrant is an index, not the source of truth.
 
-New architecture document:
+New architecture documents:
 - `04_KNOWLEDGE/DOCUMENT_INGESTION_SERVICE.md`
+- `04_KNOWLEDGE/DOCUMENT_AND_KNOWLEDGE_ARCHITECTURE.md`
+
+Large-document architecture is now explicitly defined: retrieval-first for ordinary questions; bounded, planned section-by-section analysis for whole-document tasks; Qwen3.6 262k context is a capability margin, not a default target.
 
 ## Infrastructure
 
@@ -86,14 +89,16 @@ Completed:
 
 Immediate next steps:
 1. Implement Document Ingestion Service skeleton.
-2. TXT/Markdown parser.
-3. Normalized document model.
+2. Normalized document model and structure-aware chunker.
+3. TXT/Markdown parser and end-to-end test.
 4. SHA-256 deduplication/version foundation.
-5. Deterministic chunker.
-6. Integration with Knowledge Engine `/v1/ingest`.
-7. End-to-end TXT/Markdown test.
-8. Then DOCX/XLSX/PPTX/CSV.
-9. Then PDF/OCR/Vision integration.
+5. Integration with Knowledge Engine `/v1/ingest`.
+6. DOCX/XLSX/PPTX/CSV.
+7. PDF/OCR/Vision integration.
+8. Object Storage + metadata lifecycle.
+9. Permission-aware retrieval.
+10. Reranking/evidence fusion.
+11. Agent whole-document analysis workflows.
 
 ## Runtime cleanup note
 
