@@ -406,8 +406,9 @@ async def chat_completions(request: ChatRequest):
             "sources": [],
         }
     else:
-        retrieval_question = routing_context(request.messages, question)
-        result = await run_query(retrieval_question)
+        # Routing uses conversation context, but retrieval must use the actual latest user question.
+        # Feeding the full conversation into vector search can pull unrelated evidence from earlier turns.
+        result = await run_query(question)
         metadata = metadata_from_rag(result, route_reason)
         evidence_status = str(result.get("evidence_status") or "").upper()
         answer_status = str(result.get("answer_status") or "").upper()
