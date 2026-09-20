@@ -21,6 +21,21 @@
 17. Do not use the Qwen3.6 262k context as the default destination for whole documents; large context is a capability margin for cases where broader context is justified.
 18. Document versions, relationships, access scope and lifecycle must be represented in metadata so retrieval can select the applicable evidence.
 
+## 2026-09-20
+
+19. Adopt `04_KNOWLEDGE/OPEN_WEBUI_INTEGRATION_AND_WEB_SEARCH.md` as the baseline for Open WebUI integration and controlled Web Search.
+20. Open WebUI remains the primary interaction layer, but it must not become a second authoritative document store, metadata registry or production vector index for Corporate AI knowledge.
+21. The standard Open WebUI file RAG path must not be treated as the Corporate AI ingestion path because it can create independent `file-*` collections and use a different embedding model.
+22. Before implementing a custom upload workaround, validate Open WebUI External Knowledge → Qdrant and the documented Filter `file_handler` extension point.
+23. Corporate AI production retrieval must use Qwen3-Embedding-4B (2560 dimensions) or route through Knowledge Engine; mismatched Open WebUI embeddings must not query `corporate_knowledge`.
+24. Web Search is an external evidence source, not an extension of internal corporate knowledge. Internal and web evidence must retain separate provenance.
+25. The primary LLM must not have unrestricted Internet access. Web Search and URL fetching must execute through a controlled tool/service boundary with egress, domain, timeout, size, concurrency and prompt-injection controls.
+26. Web content is untrusted data and cannot override system instructions, tool policy, access controls or authorization.
+27. Support three web modes: explicit web search, internal-first/web-fallback when policy allows, and internal-only mode for confidential tasks.
+28. Web Search should ultimately be exposed through the same Corporate AI Agent/Tool Policy and provenance model as other external tools, even when Open WebUI provides the user-facing search controls.
+29. A self-hosted SearXNG deployment is the first candidate for controlled web search; a hosted search provider remains an alternative if quality/reliability requires it.
+30. Documentation and plans are not implementation: Open WebUI integration and Web Search become complete only after DGX runtime validation.
+
 ## Current validation checkpoint
 
 - Qwen3.6 production configuration validated: 262144 context, GPU utilization 0.65, KV FP8, tool calling enabled.
@@ -35,4 +50,5 @@
 - Candidate numeric conflict detector validated as a prototype, but deliberately not integrated into production query flow yet.
 
 ## 19. Document Metadata and Version Foundation
+
 The Document Ingestion module uses PostgreSQL as the authoritative metadata/version registry. Qdrant receives the retrieval-relevant metadata as payload and supports document/version/lifecycle filtering. A new successful version becomes CURRENT only after indexing; the previous CURRENT version becomes SUPERSEDED. Failed or incomplete ingestions are not promoted to CURRENT.
