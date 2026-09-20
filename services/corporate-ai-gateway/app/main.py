@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 KNOWLEDGE_ENGINE_URL = os.getenv(
     "KNOWLEDGE_ENGINE_URL",
     "http://corporate-ai-knowledge-engine-0.3.1-test:8090",
@@ -139,26 +139,59 @@ def heuristic_route(question: str) -> str | None:
     return None
 
 
-async def classify_route(question: str) -> tuple[str, str]:
-    heuristic = heuristic_route(question)
+async def routing_context(messages: list[ChatMessage], question: str) -> str:
+    parts = []
+    for message in reversed(messages):
+        if message.role != "user":
+            continue
+        content = message.content
+        if isinstance(content, str):
+            text = content.strip()
+        elif isinstance(content, list):
+            text = " ".join(
+                str(item.get("text", ""))
+                for item in content
+                if isinstance(item, dict) and item.get("type") == "text"
+            ).strip()
+        else:
+            text = ""
+        if text:
+            parts.append(text[:3000])
+        if len(parts) >= 4:
+            break
+    context = "\n".join(reversed(parts))
+    return context or question
+
+
+async def classify_route(question: str, messages: list[ChatMessage]) -> tuple[str, str]:
+    context = routing_context(messages, question)
+    heuristic = heuristic_route(context)
     if heuristic:
         return heuristic, "deterministic_domain_match"
 
     router_prompt = """You are the routing controller for a corporate AI assistant.
-Choose exactly one route for the user's question:
-- GENERAL: answer from the model's general knowledge/reasoning; no company documents are required.
-- RAG: the answer depends on company-internal information, provided documents, internal policies, procedures, records, or other knowledge-base facts.
+Choose exactly one route:
+- GENERAL: the answer does not depend on this company's private information.
+- RAG: the answer depends on company-specific facts, internal documents, policies, procedures, records, stored knowledge, or a company-specific follow-up.
+
+Examples:
+- "Каква е разликата между TCP и UDP?" -> GENERAL
+- "Как работи Docker?" -> GENERAL
+- "Напиши ми учтив имейл за среща." -> GENERAL
+- "Какъв е размерът на дневните командировъчни?" -> RAG
+- "Каква е нашата политика за отпуските?" -> RAG
+- "А при нас как е?" after an internal-policy discussion -> RAG
 
 Rules:
-- If the user asks about internal/company-specific facts, policies, procedures, documents, employees, expenses, procurement requirements, or stored records, choose RAG.
-- If the user asks a general conceptual, educational, mathematical, writing, brainstorming, or coding question with no company-specific dependency, choose GENERAL.
-- When uncertain between GENERAL and RAG, choose RAG.
-Return ONLY valid JSON: {"route":"GENERAL"} or {"route":"RAG"}.
+- Short follow-ups such as "а при нас?", "как е според документа?" or "това важи ли за нас?" use RAG when their context is company-specific.
+- Use GENERAL for ordinary conceptual, educational, mathematical, writing, brainstorming, coding, and troubleshooting questions without company-specific dependency.
+- If genuinely ambiguous after considering the conversation, choose RAG.
+Return ONLY JSON: {"route":"GENERAL"} or {"route":"RAG"}.
 """
     raw = await qwen_chat(
         [
             {"role": "system", "content": router_prompt},
-            {"role": "user", "content": question},
+            {"role": "user", "content": context},
         ],
         temperature=0.0,
         max_tokens=40,
@@ -240,10 +273,10 @@ async def synthesize_grounded_answer(
     request: ChatRequest,
     question: str,
     result: dict[str, Any],
-) -> str:
+) -> tuple[str, bool]:
     sources = result.get("sources")
     if not isinstance(sources, list) or not sources:
-        return "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор."
+        return "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор.", False, False
 
     evidence = source_context(sources)
     if not evidence:
@@ -280,8 +313,8 @@ Rules:
         if isinstance(s, dict) and str(s.get("content") or "").strip()
     ])
     if not valid_source_citations(answer, usable_sources):
-        return "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор."
-    return answer
+        return "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор.", False
+    return answer, True
 
 
 @app.get("/health")
@@ -333,7 +366,7 @@ async def chat_completions(request: ChatRequest):
     if not question:
         raise HTTPException(status_code=400, detail="No user message supplied")
 
-    route, route_reason = await classify_route(question)
+    route, route_reason = await classify_route(question, request.messages)
 
     if route == "general":
         system = (
@@ -360,7 +393,8 @@ async def chat_completions(request: ChatRequest):
             "sources": [],
         }
     else:
-        result = await run_query(question)
+        retrieval_question = routing_context(request.messages, question)
+        result = await run_query(retrieval_question)
         metadata = metadata_from_rag(result, route_reason)
         evidence_status = str(result.get("evidence_status") or "").upper()
         answer_status = str(result.get("answer_status") or "").upper()
@@ -377,9 +411,9 @@ async def chat_completions(request: ChatRequest):
                 "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор.",
             )
         else:
-            answer = await synthesize_grounded_answer(request, question, result)
-            metadata["grounded"] = True
-            metadata["answer_status"] = "GROUNDED"
+            answer, grounded = await synthesize_grounded_answer(request, question, result)
+            metadata["grounded"] = grounded
+            metadata["answer_status"] = "GROUNDED" if grounded else "NO_ANSWER"
 
     body = openai_response(answer, request.model or MODEL_NAME, metadata)
 
