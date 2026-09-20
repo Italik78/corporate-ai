@@ -88,3 +88,31 @@ def test_invalid_chunk_parameters():
         chunk_document(doc, target_words=0)
     with pytest.raises(ValueError):
         chunk_document(doc, target_words=10, overlap_words=10)
+
+
+def test_document_metadata_version_foundation():
+    metadata = DocumentMetadata(
+        document_id="policy-001",
+        title="Policy",
+        created_at="2026-09-20T00:00:00+00:00",
+        updated_at="2026-09-20T00:00:00+00:00",
+        version=2,
+        document_date="2026-09-20",
+        effective_from="2026-10-01",
+        project_id="project-001",
+        access_scope="INTERNAL",
+    )
+    assert metadata.version == 2
+    assert metadata.document_date == "2026-09-20"
+    assert metadata.effective_from == "2026-10-01"
+    assert metadata.lifecycle_status.value == "INGESTING"
+
+
+def test_chunk_carries_version_metadata():
+    doc = _document(b"alpha beta gamma")
+    doc.metadata.version = 2
+    doc.metadata.document_date = "2026-09-20"
+    doc.metadata.effective_from = "2026-10-01"
+    chunks = chunk_document(doc)
+    assert chunks[0].document_id == "d1"
+    assert chunks[0].content
