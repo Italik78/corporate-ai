@@ -1,5 +1,43 @@
 # ROADMAP
 
+## Corporate Information System — Target
+
+Corporate AI is being built as a **corporate information system**, not only as a chat interface or RAG demo.
+
+The target user experience is Open WebUI, while Corporate AI remains authoritative for document intelligence, knowledge, evidence, business tools, security and provenance.
+
+Core capabilities:
+
+- understand and index shared corporate documents;
+- preserve document structure, versions and relationships;
+- answer grounded questions with evidence and citations;
+- analyze complete documents through bounded, planned workflows;
+- compare documents and detect contradictions without silently choosing a winner;
+- use Open WebUI folders/workspaces, Knowledge, system prompts, models, skills, tools and web search where appropriate;
+- generate Word/Excel/PowerPoint/PDF artifacts with traceability;
+- perform controlled Web Research without giving the LLM unrestricted Internet access;
+- enforce access scope, lifecycle, tool policy and provenance outside the UI;
+- provide internal-only, explicit-web and internal-first/web-fallback operating modes.
+
+Implementation rule:
+
+> Work **command by command on the DGX**, validate every milestone on the real runtime, and only then mark the corresponding roadmap item complete. Documentation or code committed to GitHub is not acceptance by itself.
+
+## Execution protocol
+
+Every implementation step follows:
+
+1. Inspect current state.
+2. Change one bounded component.
+3. Build/restart only the required service.
+4. Run health/API/unit tests.
+5. Run an end-to-end test when applicable.
+6. Inspect logs and persisted data.
+7. Record the result in GitHub.
+8. Proceed to the next command.
+
+No destructive cleanup is allowed while an older validated path is still required for comparison.
+
 ## Phase 1 — Baseline
 
 Verify DGX post-update; inventory containers, images, volumes, networks and configs; preserve existing data.
@@ -66,30 +104,54 @@ Pending:
 Baseline:
 - `04_KNOWLEDGE/OPEN_WEBUI_INTEGRATION_AND_WEB_SEARCH.md`
 
-#### C1 — Open WebUI integration discovery
-- [ ] validate External Knowledge → Qdrant against `corporate_knowledge`
+#### C1 — Open WebUI capability and integration validation
+- [ ] confirm installed Open WebUI version and enabled capabilities
+- [ ] validate External Knowledge → Qdrant
 - [ ] validate query embedding compatibility with Qwen3-Embedding-4B / 2560 dimensions
-- [ ] validate metadata/citation mapping
 - [ ] validate Knowledge Base behavior
-- [ ] validate Filter `file_handler`
-- [ ] select the upload integration path
+- [ ] validate Folder/workspace + System Prompt + Knowledge behavior
+- [ ] validate Filter / `file_handler`
+- [ ] validate OpenAPI tool server integration
+- [ ] validate MCP integration where useful
+- [ ] select production upload/retrieval path
 - [ ] prevent duplicate Open WebUI production vector indexing
 
-#### C2 — Controlled document upload
-- [ ] route Open WebUI uploads into Document Ingestion
-- [ ] preserve existing UI upload experience
+#### C2 — Corporate document upload and document intelligence
+- [ ] preserve Open WebUI upload UX
+- [ ] route uploads into Document Ingestion
 - [ ] register metadata/version before indexing
-- [ ] preserve original file outside Qdrant
+- [ ] preserve original files outside Qdrant
 - [ ] validate DOCX/XLSX/PPTX/CSV end-to-end
 - [ ] integrate PDF/OCR/Vision
+- [ ] preserve page/section/table/slide provenance
+- [ ] expose document inspection and analysis operations
+- [ ] validate current/superseded version behavior
 
-#### C3 — Corporate Knowledge integration
-- [ ] expose Corporate Knowledge through validated external Qdrant or Knowledge Engine integration
+#### C3 — Corporate Knowledge and Workspace layer
+- [ ] expose Corporate Knowledge through Knowledge Engine or validated external Qdrant integration
+- [ ] map Open WebUI Knowledge to authoritative Corporate AI scopes
 - [ ] enforce version/lifecycle/project/access filters
 - [ ] preserve evidence claims and citations
-- [ ] validate current/superseded version behavior in UI
+- [ ] configure reusable Corporate AI models
+- [ ] configure domain-specific Folders/workspaces
+- [ ] configure system prompts and Skills
+- [ ] expose controlled corporate tools
+- [ ] validate focused retrieval vs full-context behavior
+- [ ] validate agentic document retrieval for large document sets
 
-#### C4 — Controlled Web Search
+#### C4 — Corporate Tools and artifact generation
+- [ ] Knowledge Search tool
+- [ ] Document inspection tool
+- [ ] Document comparison tool
+- [ ] whole-document analysis workflow
+- [ ] Word generation
+- [ ] Excel generation
+- [ ] PowerPoint generation
+- [ ] PDF generation
+- [ ] preview-before-side-effect workflow
+- [ ] artifact provenance / source traceability
+
+#### C5 — Controlled Web Search
 - [ ] decide SearXNG vs hosted provider
 - [ ] deploy controlled search egress
 - [ ] normalize web evidence
@@ -98,24 +160,34 @@ Baseline:
 - [ ] add domain/timeout/size/concurrency controls
 - [ ] isolate web prompt injection
 - [ ] keep LLM network access disabled
+- [ ] expose explicit web-search mode
+- [ ] implement internal-first/web-fallback mode
+- [ ] implement internal-only/offline mode
 
-#### C5 — Agent integration
+#### C6 — Agent and reasoning workflows
+- [ ] Agent Controller
+- [ ] planning and multi-step execution
 - [ ] internal-first/web-fallback policy
-- [ ] explicit research workflow
+- [ ] cross-document reasoning
 - [ ] cross-source evidence evaluation
-- [ ] separate internal/web provenance
+- [ ] contradiction handling
 - [ ] confirmation for high-impact actions
 - [ ] artifact traceability
+- [ ] bounded resource policy and controlled failure modes
 
-#### C6 — DGX acceptance
+#### C7 — DGX acceptance
 - [ ] UI upload → Document Ingestion → PostgreSQL → Qdrant
 - [ ] internal grounded query
+- [ ] multi-document query
+- [ ] whole-document analysis
+- [ ] current/superseded version test
 - [ ] explicit web query
 - [ ] mixed internal + web query
 - [ ] citation/provenance verification
 - [ ] blocked-domain and prompt-injection tests
 - [ ] timeout/resource exhaustion tests
 - [ ] internal-only/offline mode
+- [ ] Open WebUI Folder/Knowledge/Tools acceptance
 
 ## Phase 4 — Multimodal
 
