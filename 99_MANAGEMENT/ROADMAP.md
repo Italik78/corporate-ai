@@ -30,35 +30,92 @@ Completed:
 - Knowledge Engine 0.3.1 test runtime validation.
 - Normalized RAG response contract.
 - Git hygiene for runtime data and backup files.
+- Document & Knowledge Architecture v1.
 
-Architecture baseline added:
-- `04_KNOWLEDGE/DOCUMENT_AND_KNOWLEDGE_ARCHITECTURE.md`
-- Large documents are not normally placed whole into the LLM context.
-- Normalized structure, versioning, document relationships, scoped retrieval and bounded whole-document analysis are defined.
+### Phase A.2 — Document Metadata & Version Foundation
 
-Current limitation:
-- Conflict detection is a numeric candidate detector, not a final semantic conflict resolver.
-- Retrieval quality and reranking remain separate tasks.
-- `/v1/ingest` accepts normalized content; universal file ingestion is not implemented there.
+- [x] PostgreSQL metadata registry
+- [x] SHA-256 deduplication
+- [x] document versions and lifecycle
+- [x] supersession relationships
+- [x] effective dates / project / access scope metadata
+- [x] metadata propagation to Qdrant
+- [x] version/lifecycle filters in Knowledge Engine
+- [x] DGX version/lifecycle filter acceptance validation
 
-Next:
-1. Document Ingestion Service.
-2. Implement normalized document model and structure-aware chunking.
-3. TXT/Markdown end-to-end ingestion.
-4. SHA-256 deduplication/version foundation.
-5. Knowledge Engine integration.
-6. End-to-end ingestion/RAG test.
-7. DOCX/XLSX/PPTX/CSV.
-8. PDF/OCR/Vision integration.
-9. Object Storage + metadata lifecycle.
-10. Permission-aware retrieval.
-11. Reranking/evidence fusion.
-12. Agent document-analysis workflows.
-13. Claims/provenance completion.
-14. Partial-answer handling.
-15. Conditional reranking/evidence fusion.
-16. Improve semantic conflict detection.
-17. Evaluate knowledge graph for procedural/organizational relationships.
+### Phase B — Office / Tabular Normalization
+
+Implemented:
+- [x] DOCX extractor
+- [x] XLSX extractor
+- [x] PPTX extractor
+- [x] CSV extractor
+- [x] normalized blocks with table/heading provenance
+- [x] pipeline routing to format-specific extractors
+- [x] Knowledge Engine handoff through normalized chunks
+
+Pending:
+- [ ] DGX build and end-to-end ingestion/RAG validation
+- [ ] validate Open WebUI upload integration with Document Ingestion
+- [ ] validate production retrieval path without Open WebUI independent file-* vector collections
+
+### Phase C — Open WebUI Integration & Web Search
+
+**Status: ARCHITECTURE DEFINED / VALIDATION PENDING**
+
+Baseline:
+- `04_KNOWLEDGE/OPEN_WEBUI_INTEGRATION_AND_WEB_SEARCH.md`
+
+#### C1 — Open WebUI integration discovery
+- [ ] validate External Knowledge → Qdrant against `corporate_knowledge`
+- [ ] validate query embedding compatibility with Qwen3-Embedding-4B / 2560 dimensions
+- [ ] validate metadata/citation mapping
+- [ ] validate Knowledge Base behavior
+- [ ] validate Filter `file_handler`
+- [ ] select the upload integration path
+- [ ] prevent duplicate Open WebUI production vector indexing
+
+#### C2 — Controlled document upload
+- [ ] route Open WebUI uploads into Document Ingestion
+- [ ] preserve existing UI upload experience
+- [ ] register metadata/version before indexing
+- [ ] preserve original file outside Qdrant
+- [ ] validate DOCX/XLSX/PPTX/CSV end-to-end
+- [ ] integrate PDF/OCR/Vision
+
+#### C3 — Corporate Knowledge integration
+- [ ] expose Corporate Knowledge through validated external Qdrant or Knowledge Engine integration
+- [ ] enforce version/lifecycle/project/access filters
+- [ ] preserve evidence claims and citations
+- [ ] validate current/superseded version behavior in UI
+
+#### C4 — Controlled Web Search
+- [ ] decide SearXNG vs hosted provider
+- [ ] deploy controlled search egress
+- [ ] normalize web evidence
+- [ ] implement bounded URL fetching
+- [ ] preserve URL and retrieval timestamp provenance
+- [ ] add domain/timeout/size/concurrency controls
+- [ ] isolate web prompt injection
+- [ ] keep LLM network access disabled
+
+#### C5 — Agent integration
+- [ ] internal-first/web-fallback policy
+- [ ] explicit research workflow
+- [ ] cross-source evidence evaluation
+- [ ] separate internal/web provenance
+- [ ] confirmation for high-impact actions
+- [ ] artifact traceability
+
+#### C6 — DGX acceptance
+- [ ] UI upload → Document Ingestion → PostgreSQL → Qdrant
+- [ ] internal grounded query
+- [ ] explicit web query
+- [ ] mixed internal + web query
+- [ ] citation/provenance verification
+- [ ] blocked-domain and prompt-injection tests
+- [ ] timeout/resource exhaustion tests
+- [ ] internal-only/offline mode
 
 ## Phase 4 — Multimodal
 
@@ -115,14 +172,3 @@ Focus:
 - resource contention tests.
 - security hardening.
 - deployment reproducibility.
-
-
-### Phase A.2 — Document Metadata & Version Foundation
-- [x] PostgreSQL metadata registry
-- [x] SHA-256 deduplication
-- [x] document versions and lifecycle
-- [x] supersession relationships
-- [x] effective dates / project / access scope metadata
-- [x] metadata propagation to Qdrant
-- [x] version/lifecycle filters in Knowledge Engine
-- [ ] DGX integration and end-to-end version transition validation
