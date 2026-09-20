@@ -1,12 +1,36 @@
 services:
+  corporate-ai-postgres:
+    image: postgres:16.15-alpine
+    container_name: corporate-ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: corporate_ai
+      POSTGRES_USER: corporate_ai
+      POSTGRES_PASSWORD: corporate_ai
+    volumes:
+      - corporate_ai_postgres_data:/var/lib/postgresql/data
+    networks:
+      - ai-net
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U corporate_ai -d corporate_ai"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   document-ingestion:
     build:
       context: ../../services/document-ingestion
     container_name: corporate-ai-document-ingestion
     restart: unless-stopped
+    depends_on:
+      corporate-ai-postgres:
+        condition: service_healthy
     environment:
       INGESTION_PORT: "8095"
       INGESTION_KNOWLEDGE_ENGINE_URL: "http://corporate-ai-knowledge-engine-0.3.1-test:8090"
+      INGESTION_METADATA_DATABASE_URL: "postgresql://corporate_ai:corporate_ai@corporate-ai-postgres:5432/corporate_ai"
       INGESTION_MAX_FILE_SIZE_MB: "25"
     ports:
       - "127.0.0.1:8095:8095"
@@ -19,6 +43,9 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
+
+volumes:
+  corporate_ai_postgres_data:
 
 networks:
   ai-net:
