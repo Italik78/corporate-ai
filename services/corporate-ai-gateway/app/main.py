@@ -166,7 +166,7 @@ Return ONLY valid JSON: {"route":"GENERAL"} or {"route":"RAG"}.
         max_tokens=40,
     )
     try:
-        match = re.search(r"\{\s*"route"\s*:\s*"(GENERAL|RAG)"\s*\}", raw.upper())
+        match = re.search(r'\{\s*"route"\s*:\s*"(GENERAL|RAG)"\s*\}', raw.upper())
         if match:
             return match.group(1).lower(), "llm_router"
     except Exception:
