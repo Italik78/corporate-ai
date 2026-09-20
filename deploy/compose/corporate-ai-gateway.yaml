@@ -2,7 +2,7 @@ services:
   corporate-ai-gateway:
     build:
       context: ../../services/corporate-ai-gateway
-    container_name: corporate-ai-gateway-0.2.0
+    container_name: corporate-ai-gateway-0.3.0
     restart: unless-stopped
     environment:
       KNOWLEDGE_ENGINE_URL: "http://corporate-ai-knowledge-engine-0.3.1-test:8090"
@@ -10,6 +10,8 @@ services:
       QWEN_MODEL: "qwen36"
       MODEL_NAME: "corporate-ai"
       TIMEOUT_SECONDS: "120"
+      RAG_TOP_K: "5"
+      RAG_SCORE_THRESHOLD: "0.45"
     ports:
       - "127.0.0.1:8096:8080"
     networks:
