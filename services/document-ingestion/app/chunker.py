@@ -97,7 +97,7 @@ def _make(
     confidence = min((b.confidence for b in blocks), default=1.0)
 
     return Chunk(
-        chunk_id=f"{doc.document_id}:chunk:{idx:05d}",
+        chunk_id=f"{doc.document_id}:v{doc.metadata.version}:chunk:{idx:05d}",
         document_id=doc.document_id,
         source_file=doc.source_file,
         version=doc.metadata.version,
