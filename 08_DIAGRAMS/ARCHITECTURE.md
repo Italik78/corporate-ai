@@ -4,11 +4,45 @@ User
 ↓
 Open WebUI
 ↓
-Corporate AI Gateway / Agent
+Corporate AI Gateway
+↓
+Agent
+├── Task understanding / planning
+├── Tool Policy / approval
+├── Knowledge & Document Tools
+│   ├── Document Ingestion
+│   ├── Retrieval / Reranking
+│   └── Evidence / Provenance
 ├── Qwen3.6
-├── Knowledge: Embedding, Qdrant, Reranker, Knowledge Graph
-├── Vision
-└── Tools: Word, Excel, PowerPoint, PDF
+└── Office / File Tools
+
+Document Knowledge Flow
+
+Original File / Object Storage
+↓
+Security
+↓
+Router
+↓
+Parser / OCR / Vision
+↓
+Normalized Document Model
+↓
+Metadata / Versioning
+↓
+Structure-aware Chunking
+↓
+Embedding
+↓
+Qdrant
+↓
+Retrieval / Evidence
+↓
+Agent Context
+↓
+Qwen3.6
+
+Large documents are processed through bounded retrieval or planned section-by-section analysis. Original files remain outside Qdrant.
 
 Infrastructure: DGX Spark → NVIDIA Container Runtime → services on ai-net.
 
