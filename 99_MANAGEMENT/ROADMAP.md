@@ -31,6 +31,11 @@ Completed:
 - Normalized RAG response contract.
 - Git hygiene for runtime data and backup files.
 
+Architecture baseline added:
+- `04_KNOWLEDGE/DOCUMENT_AND_KNOWLEDGE_ARCHITECTURE.md`
+- Large documents are not normally placed whole into the LLM context.
+- Normalized structure, versioning, document relationships, scoped retrieval and bounded whole-document analysis are defined.
+
 Current limitation:
 - Conflict detection is a numeric candidate detector, not a final semantic conflict resolver.
 - Retrieval quality and reranking remain separate tasks.
@@ -38,12 +43,22 @@ Current limitation:
 
 Next:
 1. Document Ingestion Service.
-2. TXT/Markdown end-to-end ingestion.
-3. Claims/provenance completion.
-4. Partial-answer handling.
-5. Conditional reranking/evidence fusion.
-6. Improve semantic conflict detection.
-7. Evaluate knowledge graph for procedural/organizational relationships.
+2. Implement normalized document model and structure-aware chunking.
+3. TXT/Markdown end-to-end ingestion.
+4. SHA-256 deduplication/version foundation.
+5. Knowledge Engine integration.
+6. End-to-end ingestion/RAG test.
+7. DOCX/XLSX/PPTX/CSV.
+8. PDF/OCR/Vision integration.
+9. Object Storage + metadata lifecycle.
+10. Permission-aware retrieval.
+11. Reranking/evidence fusion.
+12. Agent document-analysis workflows.
+13. Claims/provenance completion.
+14. Partial-answer handling.
+15. Conditional reranking/evidence fusion.
+16. Improve semantic conflict detection.
+17. Evaluate knowledge graph for procedural/organizational relationships.
 
 ## Phase 4 — Multimodal
 
