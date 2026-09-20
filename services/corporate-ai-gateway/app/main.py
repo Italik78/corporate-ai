@@ -248,18 +248,20 @@ def valid_source_citations(answer: str, source_count: int) -> bool:
 
 def source_context(sources: list[Any]) -> str:
     blocks = []
-    for index, source in enumerate(sources, start=1):
+    source_number = 0
+    for source in sources:
         if not isinstance(source, dict):
             continue
+        content = str(source.get("content") or "").strip()
+        if not content:
+            continue
+        source_number += 1
         document_id = str(source.get("document_id") or "unknown")
         source_file = str(source.get("source_file") or document_id)
         page = source.get("page")
         score = source.get("score")
-        content = str(source.get("content") or "").strip()
-        if not content:
-            continue
         blocks.append(
-            f"[SOURCE {index}]\n"
+            f"[SOURCE {source_number}]\n"
             f"document_id: {document_id}\n"
             f"source_file: {source_file}\n"
             f"page: {page}\n"
