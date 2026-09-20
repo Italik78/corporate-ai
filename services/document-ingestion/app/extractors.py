@@ -165,45 +165,64 @@ def _extract_csv(filename: str, data: bytes) -> list[NormalizedBlock]:
 
 def _extract_docx(filename: str, data: bytes) -> list[NormalizedBlock]:
     from docx import Document
+    from docx.document import Document as DocumentType
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+    from docx.oxml.table import CT_Tbl
+    from docx.oxml.text.paragraph import CT_P
 
     try:
         document = Document(io.BytesIO(data))
     except Exception as exc:
         raise ValueError("DOCX_PARSE_ERROR") from exc
 
+    def iter_body_blocks(parent: DocumentType):
+        body = parent.element.body
+        for child in body.iterchildren():
+            if isinstance(child, CT_P):
+                yield Paragraph(child, parent)
+            elif isinstance(child, CT_Tbl):
+                yield Table(child, parent)
+
     blocks: list[NormalizedBlock] = []
     section: str | None = None
-    counter = 0
+    paragraph_index = 0
+    table_index = 0
+    block_index = 0
 
-    for paragraph_index, paragraph in enumerate(document.paragraphs, start=1):
-        text = paragraph.text.strip()
-        if not text:
+    for item in iter_body_blocks(document):
+        if isinstance(item, Paragraph):
+            paragraph_index += 1
+            text = item.text.strip()
+            if not text:
+                continue
+
+            block_index += 1
+            style_name = item.style.name or ""
+            style = style_name.lower()
+            is_heading = "heading" in style or style.startswith("title")
+            if is_heading:
+                section = text
+
+            blocks.append(
+                NormalizedBlock(
+                    block_id=f"docx-p-{paragraph_index:06d}",
+                    block_type="heading" if is_heading else "text",
+                    content=text,
+                    section=section,
+                    provenance={
+                        "source_format": "docx",
+                        "paragraph_index": paragraph_index,
+                        "style": style_name,
+                    },
+                )
+            )
             continue
 
-        counter += 1
-        style = (paragraph.style.name or "").lower()
-        is_heading = "heading" in style or style.startswith("title")
-        if is_heading:
-            section = text
-
-        blocks.append(
-            NormalizedBlock(
-                block_id=f"docx-p-{counter:06d}",
-                block_type="heading" if is_heading else "text",
-                content=text,
-                section=section,
-                provenance={
-                    "source_format": "docx",
-                    "paragraph_index": paragraph_index,
-                    "style": paragraph.style.name,
-                },
-            )
-        )
-
-    for table_index, table in enumerate(document.tables, start=1):
+        table_index += 1
         rows = [
             [_clean_cell(cell.text.replace("\n", " ")) for cell in row.cells]
-            for row in table.rows
+            for row in item.rows
         ]
         rows = [row for row in rows if any(cell for cell in row)]
         if not rows:
@@ -212,7 +231,7 @@ def _extract_docx(filename: str, data: bytes) -> list[NormalizedBlock]:
         width = max(len(row) for row in rows)
         headers = rows[0] + [""] * (width - len(rows[0]))
         normalized_rows = [row + [""] * (width - len(row)) for row in rows[1:]]
-        counter += 1
+        block_index += 1
         blocks.append(
             NormalizedBlock(
                 block_id=f"docx-table-{table_index:06d}",
