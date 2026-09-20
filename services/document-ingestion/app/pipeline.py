@@ -141,6 +141,11 @@ async def ingest_document(
             indexed += 1
 
         finalized = await finalize_version(document_id, metadata.version)
+        await client.set_lifecycle_status(
+            document_id=document_id,
+            version=metadata.version,
+            lifecycle_status=finalized.lifecycle_status.value,
+        )
         jobs[ingestion_id]["status"] = DocumentStatus.READY
         jobs[ingestion_id]["lifecycle_status"] = finalized.lifecycle_status
 
