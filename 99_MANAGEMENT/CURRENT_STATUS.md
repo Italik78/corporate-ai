@@ -6,6 +6,14 @@
 
 Corporate AI on NVIDIA DGX Spark GB10. GitHub repository is the source of truth.
 
+### Current product target
+
+The project target is a **Corporate Information System** built on Open WebUI + Corporate AI services.
+
+Open WebUI is the primary user-facing workspace. Corporate AI remains authoritative for document ingestion, metadata/versioning, knowledge retrieval, evidence, security, tools, agents and provenance.
+
+The intended system must understand shared documents as structured, versioned corporate information — not merely as isolated text chunks.
+
 ## Runtime
 
 - DGX Spark GB10, 128 GB unified memory, 4 TB NVMe.
@@ -16,6 +24,7 @@ Corporate AI on NVIDIA DGX Spark GB10. GitHub repository is the source of truth.
 - Primary LLM: Qwen3.6-35B-A3B-NVFP4.
 - Qwen3.6: context 262144, GPU utilization 0.65, KV FP8, MTP 3, tool calling enabled, thinking disabled for standard mode.
 - Qwen3.6 Vision pipeline foundation is validated.
+- Open WebUI is connected to `ai-net` and currently has address `172.18.0.9`.
 
 ## Knowledge foundation
 
@@ -51,31 +60,43 @@ Validated foundation:
 - Structured Vision JSON output.
 - TABLE, VISUAL and COMPLEX page handling.
 
-Architecture decision:
+Architecture:
 - Universal file ingestion is a separate **Document Ingestion Service**.
 - Knowledge Engine remains a normalized chunk → embedding → Qdrant/RAG service.
 - MinIO is the planned production Object Storage on **AI-DATA-01**, not on DGX Spark.
 - Original documents remain in Object Storage; Qdrant is an index, not the source of truth.
+- Large-document work is retrieval-first for ordinary questions and planned/bounded for whole-document analysis.
 
-New architecture documents:
-- `04_KNOWLEDGE/DOCUMENT_INGESTION_SERVICE.md`
-- `04_KNOWLEDGE/DOCUMENT_AND_KNOWLEDGE_ARCHITECTURE.md`
+## Open WebUI discovery checkpoint
 
-Large-document architecture is now explicitly defined: retrieval-first for ordinary questions; bounded, planned section-by-section analysis for whole-document tasks; Qwen3.6 262k context is a capability margin, not a default target.
+The Open WebUI container is already attached to `ai-net`:
 
-## Infrastructure
+- `open-webui`: 172.18.0.9
+- `corporate-ai-qdrant`: 172.18.0.2
+- `corporate-ai-embedding-test`: 172.18.0.4
+- `corporate-ai-gateway-0.3.1`: 172.18.0.10
+- `corporate-ai-document-ingestion`: 172.18.0.11
+- `corporate-ai-qwen36`: 172.18.0.3
 
-Planned Data Server:
-- Role: PostgreSQL, Vector DB, Object Storage.
-- Target: 16 CPU cores, 64 GB RAM, 2 TB NVMe.
-- 10 GbE and RAID are architectural requirements.
+A real XLSX upload previously demonstrated the current integration boundary: Open WebUI processed the file with `sentence-transformers/all-MiniLM-L6-v2` and created an independent `file-*` collection instead of reaching Corporate Document Ingestion. This is an integration-path issue, not evidence that the Corporate XLSX extractor is broken.
 
-Current verified DGX deployment does not contain MinIO.
-No production AI-DATA-01 runtime has been verified yet.
+The Open WebUI target is broader than upload integration. We will use its capabilities where they add value:
+
+- Folders/workspaces;
+- System Prompts;
+- Knowledge;
+- reusable Models;
+- Skills;
+- Tools;
+- OpenAPI/MCP;
+- Filters;
+- Web Search.
+
+These UI capabilities must remain backed by Corporate AI authoritative services where business/security/provenance matters.
 
 ## Current phase
 
-### PHASE 3: Knowledge / Grounded Reasoning
+### PHASE 3: Knowledge / Grounded Reasoning + Corporate Information System foundation
 
 Status: IN PROGRESS
 
@@ -85,34 +106,57 @@ Completed:
 - SUPPORTED / CONFLICT / INSUFFICIENT_EVIDENCE handling.
 - Grounded RAG validation.
 - Knowledge Engine 0.3.1 stabilization.
-- Document Ingestion Service architecture definition.
+- Document Ingestion Service architecture and metadata/version foundation.
+- Office/tabular extraction implementation.
+- Open WebUI architecture and Web Search baseline.
+- Open WebUI confirmed on `ai-net`.
 
-Immediate next steps:
-1. Implement Document Ingestion Service skeleton.
-2. Normalized document model and structure-aware chunker.
-3. TXT/Markdown parser and end-to-end test.
-4. SHA-256 deduplication/version foundation.
-5. Integration with Knowledge Engine `/v1/ingest`.
-6. DOCX/XLSX/PPTX/CSV.
-7. PDF/OCR/Vision integration.
-8. Object Storage + metadata lifecycle.
-9. Permission-aware retrieval.
-10. Reranking/evidence fusion.
-11. Agent whole-document analysis workflows.
+## Immediate execution order
 
-## Runtime cleanup note
+1. **C1.1 — Inspect installed Open WebUI capabilities/version.**
+2. **C1.2 — Validate Corporate Knowledge retrieval path without mismatched embeddings.**
+3. **C1.3 — Validate Open WebUI Knowledge / Folder / System Prompt behavior.**
+4. **C1.4 — Validate Filter/file_handler and OpenAPI/MCP extension points.**
+5. **C2.1 — Implement controlled Open WebUI upload → Document Ingestion path.**
+6. **C2.2 — Validate XLSX/DOCX/PPTX/CSV through the UI.**
+7. **C2.3 — Integrate PDF/OCR/Vision.**
+8. **C3 — Build authoritative Corporate Knowledge workspace integration.**
+9. **C4 — Add document analysis and artifact tools.**
+10. **C5 — Add controlled Web Search.**
+11. **C6 — Integrate Agent workflows.**
+12. **C7 — Execute complete DGX acceptance suite.**
 
-Older Knowledge Engine test containers remain on the DGX during validation. They are not removed until the active 0.3.1 path is fully accepted.
+## Execution discipline
+
+We will work **one command at a time**.
+
+For each command:
+1. I give the exact command.
+2. User runs it on the DGX.
+3. User returns the complete output.
+4. I interpret it.
+5. We decide the next command.
+6. Only after validation do we update implementation status.
+
+No guessed paths, container names, environment variables or Open WebUI settings when the runtime can tell us the truth.
 
 ## Project rules
 
 - Status changes to DONE/COMPLETE only after real technical validation.
 - Documentation, plans and configuration alone do not count as implemented functionality.
 - Original documents are not stored in Qdrant.
-- Document content is untrusted input and never overrides system/tool policies.
+- Document content is untrusted and never overrides system/tool policies.
 - GitHub is the source of truth for project documentation.
+- Open WebUI must not become a second authoritative corporate document store.
+- Production retrieval against `corporate_knowledge` must use the Qwen3-Embedding-4B / 2560-dimensional embedding path or Knowledge Engine.
+- LLM network access remains restricted; Web Search uses a controlled external boundary.
+
+## Runtime cleanup note
+
+Older Knowledge Engine test containers remain on the DGX during validation. They are not removed until the active 0.3.1 path is fully accepted.
 
 ## Document Metadata & Version Foundation — implemented
-The Document Ingestion module now includes persistent PostgreSQL metadata/version tracking, SHA-256 deduplication, automatic version increment when version 1 is re-submitted for an existing document, lifecycle states INGESTING/CURRENT/SUPERSEDED/ARCHIVED, document relationships, effective dates, project/access metadata, version metadata propagation to Qdrant, and version/lifecycle-aware Knowledge Engine filters.
 
-Status: implementation complete; DGX build, database startup, ingestion, version transition, and retrieval-by-version validation remain to be executed on the Spark.
+The Document Ingestion module includes persistent PostgreSQL metadata/version tracking, SHA-256 deduplication, automatic version increment when version 1 is re-submitted for an existing document, lifecycle states INGESTING/CURRENT/SUPERSEDED/ARCHIVED, document relationships, effective dates, project/access metadata, version metadata propagation to Qdrant, and version/lifecycle-aware Knowledge Engine filters.
+
+Status: implementation complete; broader Phase B acceptance and Open WebUI integration remain pending.
