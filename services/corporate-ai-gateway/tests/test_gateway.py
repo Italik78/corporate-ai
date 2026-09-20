@@ -9,6 +9,7 @@ from app.main import (
     latest_user_message,
     metadata_from_rag,
     source_context,
+    valid_source_citations,
 )
 
 
@@ -63,3 +64,15 @@ def test_metadata_preserves_evidence():
     assert metadata["grounded"] is True
     assert metadata["evidence_status"] == "SUPPORTED"
     assert metadata["sources"][0]["document_id"] == "doc-1"
+
+
+def test_citation_validation_rejects_missing_citations():
+    assert not valid_source_citations("Отговор без източник.", 2)
+
+
+def test_citation_validation_rejects_unknown_source():
+    assert not valid_source_citations("Твърдение [3].", 2)
+
+
+def test_citation_validation_accepts_known_source():
+    assert valid_source_citations("Твърдение [1].", 2)
