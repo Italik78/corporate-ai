@@ -28,6 +28,8 @@ Qwen3.6-35B-A3B-NVFP4 чрез vLLM.
 - speculative MTP: 3
 
 ## Основни подсистеми
+
+Document & Knowledge Architecture v1 is the architectural baseline for large-document handling, normalized document structure, provenance, versioning, scoped retrieval and Agent document analysis. Original files are separate from the vector index.
 LLM, embeddings, Qdrant, reranker, universal document ingestion, PDF/Vision, RAG, knowledge graph, agent/tool gateway, Office tools, Open WebUI, Caddy, Corporate AI Console, monitoring, backup/recovery и evaluation.
 
 ## Принцип
