@@ -60,7 +60,7 @@ def test_metadata_preserves_evidence():
         "sources": [{"document_id": "doc-1"}],
     }
     metadata = metadata_from_rag(result, "deterministic_domain_match")
-    assert metadata["gateway_version"] == "0.3.0"
+    assert metadata["gateway_version"] == "0.3.1"
     assert metadata["route"] == "rag"
     assert metadata["grounded"] is True
     assert metadata["evidence_status"] == "SUPPORTED"
