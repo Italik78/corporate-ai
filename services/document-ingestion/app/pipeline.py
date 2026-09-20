@@ -140,12 +140,27 @@ async def ingest_document(
             await client.ingest(chunk)
             indexed += 1
 
+        superseded_version = None
+        if finalized.supersedes and ":v" in finalized.supersedes:
+            try:
+                superseded_version = int(finalized.supersedes.rsplit(":v", 1)[1])
+            except ValueError:
+                superseded_version = None
+
         finalized = await finalize_version(document_id, metadata.version)
+
         await client.set_lifecycle_status(
             document_id=document_id,
             version=metadata.version,
             lifecycle_status=finalized.lifecycle_status.value,
         )
+
+        if superseded_version is not None and superseded_version != metadata.version:
+            await client.set_lifecycle_status(
+                document_id=document_id,
+                version=superseded_version,
+                lifecycle_status=LifecycleStatus.SUPERSEDED.value,
+            )
         jobs[ingestion_id]["status"] = DocumentStatus.READY
         jobs[ingestion_id]["lifecycle_status"] = finalized.lifecycle_status
 
