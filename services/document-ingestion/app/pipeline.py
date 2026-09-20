@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from .chunker import chunk_document
 from .config import settings
-from .extractors import extract_text
+from .extractors import extract_document
 from .knowledge_client import KnowledgeEngineClient
 from .metadata import (
     DuplicateDocumentError,
@@ -40,6 +40,10 @@ def _media_type(filename: str) -> str:
         ".txt": "text/plain",
         ".md": "text/markdown",
         ".markdown": "text/markdown",
+        ".csv": "text/csv",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     }.get(Path(filename).suffix.lower(), "application/octet-stream")
 
 
@@ -81,7 +85,7 @@ async def ingest_document(
 
         jobs[ingestion_id]["status"] = DocumentStatus.ROUTING
         jobs[ingestion_id]["status"] = DocumentStatus.EXTRACTING
-        blocks = extract_text(filename, data)
+        blocks = extract_document(filename, data)
         if not blocks:
             raise ValueError("EMPTY_DOCUMENT")
 
