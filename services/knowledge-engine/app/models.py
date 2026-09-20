@@ -87,6 +87,8 @@ class RAGQuery(BaseModel):
 class Source(BaseModel):
     document_id: str | None = None
     source_file: str | None = None
+    version: int | None = None
+    lifecycle_status: str | None = None
     page: int | None = None
     chunk_id: str | None = None
     score: float
