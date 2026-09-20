@@ -93,8 +93,22 @@ def _make(
     blocks: list[NormalizedBlock],
 ) -> Chunk:
     first = blocks[0]
-    last = blocks[-1]
     confidence = min((b.confidence for b in blocks), default=1.0)
+    block_types = {b.block_type for b in blocks}
+
+    if "table" in block_types:
+        chunk_type = "table"
+        page_type = "TABLE"
+    elif "heading" in block_types:
+        chunk_type = "text"
+        page_type = "TEXT"
+    else:
+        chunk_type = "text"
+        page_type = (
+            "SLIDE"
+            if any(b.provenance.get("source_format") == "pptx" for b in blocks)
+            else "TEXT"
+        )
 
     return Chunk(
         chunk_id=f"{doc.document_id}:v{doc.metadata.version}:chunk:{idx:05d}",
@@ -108,15 +122,23 @@ def _make(
         project_id=doc.metadata.project_id,
         access_scope=doc.metadata.access_scope,
         page=first.page,
-        page_type="TEXT",
-        chunk_type="text",
+        page_type=page_type,
+        chunk_type=chunk_type,
         section=first.section,
         confidence=confidence,
         content=" ".join(words),
         provenance={
             "block_ids": list(dict.fromkeys(b.block_id for b in blocks)),
             "first_block": first.block_id,
-            "last_block": last.block_id,
+            "last_block": blocks[-1].block_id,
+            "block_types": sorted(block_types),
+            "source_formats": sorted(
+                {
+                    str(b.provenance.get("source_format"))
+                    for b in blocks
+                    if b.provenance.get("source_format")
+                }
+            ),
             "content_hash": doc.content_hash,
         },
     )
