@@ -108,6 +108,13 @@ def test_document_metadata_version_foundation():
     assert metadata.lifecycle_status.value == "INGESTING"
 
 
+def test_chunk_id_includes_version():
+    doc = _document(b"alpha beta gamma")
+    doc.metadata.version = 2
+    chunks = chunk_document(doc)
+    assert chunks[0].chunk_id == "d1:v2:chunk:00001"
+
+
 def test_chunk_carries_version_metadata():
     doc = _document(b"alpha beta gamma")
     doc.metadata.version = 2
