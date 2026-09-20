@@ -129,8 +129,6 @@ def heuristic_route(question: str) -> str | None:
         "според вътрешните",
         "процедура за закупуване",
         "процедура за покупка",
-        "служителите",
-        "фактура",
         "нашата организация",
         "в нашата организация",
         "в компанията",
@@ -208,6 +206,13 @@ def metadata_from_rag(result: dict[str, Any], route_reason: str) -> dict[str, An
     }
 
 
+def valid_source_citations(answer: str, source_count: int) -> bool:
+    citations = re.findall(r"\[(\d+)\]", answer)
+    if not citations:
+        return False
+    return all(1 <= int(number) <= source_count for number in citations)
+
+
 def source_context(sources: list[Any]) -> str:
     blocks = []
     for index, source in enumerate(sources, start=1):
@@ -265,11 +270,18 @@ Rules:
         f"EVIDENCE SOURCES:\n{evidence}\n\n"
         "Produce the final answer in Bulgarian when the question is Bulgarian."
     )
-    return await qwen_chat(
+    answer = await qwen_chat(
         [{"role": "system", "content": system}, {"role": "user", "content": user}],
         temperature=0.0 if request.temperature is None else min(request.temperature, 0.2),
         max_tokens=request.max_tokens,
     )
+    usable_sources = len([
+        s for s in sources
+        if isinstance(s, dict) and str(s.get("content") or "").strip()
+    ])
+    if not valid_source_citations(answer, usable_sources):
+        return "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор."
+    return answer
 
 
 @app.get("/health")
