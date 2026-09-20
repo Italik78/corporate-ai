@@ -17,6 +17,9 @@
 13. Keep the current numeric conflict detector as a candidate detector only; do not use it as the final semantic conflict resolver.
 14. Build Evidence Engine as a separate module before integrating conflict handling into /v1/query.
 15. Keep Open WebUI as the primary user interaction layer; Corporate AI Console is for infrastructure/application topology and service status, not a second chat UI.
+16. Adopt `04_KNOWLEDGE/DOCUMENT_AND_KNOWLEDGE_ARCHITECTURE.md` as the baseline for large-document handling: original files remain outside Qdrant; ordinary questions use bounded retrieval; whole-document tasks use planned, bounded section-by-section analysis with provenance.
+17. Do not use the Qwen3.6 262k context as the default destination for whole documents; large context is a capability margin for cases where broader context is justified.
+18. Document versions, relationships, access scope and lifecycle must be represented in metadata so retrieval can select the applicable evidence.
 
 ## Current validation checkpoint
 
