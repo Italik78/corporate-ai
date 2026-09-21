@@ -34,16 +34,18 @@ Completed:
 Current limitation:
 - Conflict detection is a numeric candidate detector, not a final semantic conflict resolver.
 - Retrieval quality and reranking remain separate tasks.
-- `/v1/ingest` accepts normalized content; universal file ingestion is not implemented there.
+- Paperless webhook E2E is still being validated.
+- PDF native-text extraction is implemented; OCR/Vision integration remains.
 
 Next:
-1. Document Ingestion Service.
-2. TXT/Markdown end-to-end ingestion.
-3. Claims/provenance completion.
-4. Partial-answer handling.
-5. Conditional reranking/evidence fusion.
-6. Improve semantic conflict detection.
-7. Evaluate knowledge graph for procedural/organizational relationships.
+1. Complete Paperless → Document Ingestion webhook E2E.
+2. Validate version registration and Qdrant indexing through Paperless.
+3. Configure/validate Paperless DOCX/XLSX support if required.
+4. Integrate PDF/OCR/Vision into Document Ingestion.
+5. Complete claims/provenance and partial-answer handling.
+6. Conditional reranking/evidence fusion.
+7. Improve semantic conflict detection.
+8. Evaluate knowledge graph for procedural/organizational relationships.
 
 ## Phase 4 — Multimodal
 
@@ -56,6 +58,8 @@ Completed:
 - Qwen3.6 Vision API validation.
 - Structured Vision JSON validation.
 - TABLE, VISUAL and COMPLEX page handling.
+- Native PDF text extraction with PyMuPDF and page/block provenance.
+- PDF → chunk → embedding → Qdrant E2E validation.
 
 Next:
 - Integrate PDF/OCR/Vision into Document Ingestion Service.
