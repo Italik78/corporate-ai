@@ -1,0 +1,22 @@
+
+deploy/compose/.env
+
+# Local secrets and runtime files
+deploy/paperless/.env
+*.bak
+*.bak-*
+__pycache__/
+*.pyc
+
+# Local runtime / backup data
+backups/
+data/
+lab/
+secrets/
+caddy/
+caddy.backup-*/
+open-webui-data-backup-*.tar.gz
+open-webui.inspect.backup-*.json
+
+# Local source backups
+services/knowledge-engine/**/*.pre-*

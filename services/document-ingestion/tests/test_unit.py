@@ -20,7 +20,7 @@ def test_filename_and_extension():
 
 
 def test_markdown_extraction():
-    blocks = extract_text("test.md", b"# Заглавие\n\nТекст за документа.")
+    blocks = extract_text("test.md", "# Заглавие\n\nТекст за документа.".encode("utf-8"))
     assert len(blocks) == 2
     assert blocks[0].block_type == "heading"
     assert blocks[1].section == "Заглавие"
@@ -201,6 +201,7 @@ def test_pptx_extraction():
     table.cell(1, 0).text = "Хардуер"
     table.cell(1, 1).text = "50 000 EUR"
 
+    presentation.save(buffer)
     blocks = extract_document("brief.pptx", buffer.getvalue())
     assert len(blocks) == 3
     assert blocks[0].block_type == "heading"
@@ -209,6 +210,27 @@ def test_pptx_extraction():
     assert "Хардуер | 50 000 EUR" in blocks[2].content
     assert blocks[2].provenance["slide"] == 1
 
+
+
+def test_pdf_extraction():
+    import fitz
+
+    pdf = fitz.open()
+    page = pdf.new_page()
+    page.insert_text((72, 72), "Corporate AI PDF test")
+    data = pdf.tobytes()
+    pdf.close()
+
+    blocks = extract_document("test.pdf", data)
+
+    assert len(blocks) == 1
+    assert blocks[0].block_type == "text"
+    assert blocks[0].page == 1
+    assert blocks[0].content == "Corporate AI PDF test"
+    assert blocks[0].provenance["source_format"] == "pdf"
+    assert blocks[0].provenance["page"] == 1
+    assert blocks[0].provenance["extraction"] == "pymupdf_text"
+    assert len(blocks[0].provenance["bbox"]) == 4
 
 def test_unsupported_extractor():
     with pytest.raises(ValueError, match="UNSUPPORTED_FILE_TYPE"):

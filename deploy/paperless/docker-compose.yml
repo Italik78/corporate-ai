@@ -1,0 +1,86 @@
+services:
+  tika:
+    image: apache/tika:3.3.1.0
+    container_name: corporate-ai-paperless-tika
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+  gotenberg:
+    image: gotenberg/gotenberg:latest
+    container_name: corporate-ai-paperless-gotenberg
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+  paperless-db:
+    image: postgres:16-alpine
+    container_name: corporate-ai-paperless-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: paperless
+      POSTGRES_USER: paperless
+      POSTGRES_PASSWORD: paperless
+    volumes:
+      - paperless_db_data:/var/lib/postgresql/data
+    networks:
+      - ai-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paperless -d paperless"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  paperless-valkey:
+    image: valkey/valkey:8-alpine
+    container_name: corporate-ai-paperless-valkey
+    restart: unless-stopped
+    command: valkey-server --save "" --appendonly no
+    networks:
+      - ai-net
+
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    container_name: corporate-ai-paperless
+    restart: unless-stopped
+    depends_on:
+      paperless-db:
+        condition: service_healthy
+      paperless-valkey:
+        condition: service_started
+    environment:
+      PAPERLESS_REDIS: redis://paperless-valkey:6379
+      PAPERLESS_DBHOST: paperless-db
+      PAPERLESS_DBNAME: paperless
+      PAPERLESS_DBUSER: paperless
+      PAPERLESS_DBPASS: paperless
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY}
+      PAPERLESS_URL: https://paperless.ai.local
+      PAPERLESS_CSRF_TRUSTED_ORIGINS: https://paperless.ai.local
+      PAPERLESS_TIME_ZONE: Europe/Sofia
+      PAPERLESS_OCR_LANGUAGE: eng
+      PAPERLESS_CONSUMER_POLLING: 5
+      PAPERLESS_CONSUMER_POLLING_RETRY_COUNT: 5
+      PAPERLESS_CONSUMER_DELETE_DUPLICATES: "false"
+      PAPERLESS_TIKA_ENABLED: "yes"
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+    volumes:
+      - paperless_data:/usr/src/paperless/data
+      - paperless_media:/usr/src/paperless/media
+      - paperless_export:/usr/src/paperless/export
+      - ./consume:/usr/src/paperless/consume
+    networks:
+      - ai-net
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  ai-net:
+    external: true
+
+volumes:
+  paperless_db_data:
+  paperless_data:
+  paperless_media:
+  paperless_export:

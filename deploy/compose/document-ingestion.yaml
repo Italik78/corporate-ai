@@ -32,6 +32,7 @@ services:
       INGESTION_KNOWLEDGE_ENGINE_URL: "http://corporate-ai-knowledge-engine-0.3.1-test:8090"
       INGESTION_METADATA_DATABASE_URL: "postgresql://corporate_ai:corporate_ai@corporate-ai-postgres:5432/corporate_ai"
       INGESTION_MAX_FILE_SIZE_MB: "25"
+      INGESTION_PAPERLESS_WEBHOOK_SECRET: "${PAPERLESS_WEBHOOK_SECRET}"
     ports:
       - "127.0.0.1:8095:8095"
     networks:

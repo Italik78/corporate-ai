@@ -17,7 +17,7 @@ from .models import NormalizedBlock
 
 
 TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
-SUPPORTED_SUFFIXES = TEXT_SUFFIXES | {".docx", ".xlsx", ".pptx", ".csv"}
+SUPPORTED_SUFFIXES = TEXT_SUFFIXES | {".docx", ".xlsx", ".pptx", ".csv", ".pdf"}
 
 
 def extract_text(filename: str, data: bytes) -> list[NormalizedBlock]:
@@ -36,6 +36,8 @@ def extract_document(filename: str, data: bytes) -> list[NormalizedBlock]:
         return _extract_plain_text(filename, data)
     if suffix == ".csv":
         return _extract_csv(filename, data)
+    if suffix == ".pdf":
+        return _extract_pdf(filename, data)
     if suffix == ".docx":
         return _extract_docx(filename, data)
     if suffix == ".xlsx":
@@ -44,6 +46,65 @@ def extract_document(filename: str, data: bytes) -> list[NormalizedBlock]:
         return _extract_pptx(filename, data)
 
     raise ValueError("UNSUPPORTED_FILE_TYPE")
+
+
+def _extract_pdf(filename: str, data: bytes) -> list[NormalizedBlock]:
+    """Extract text from PDF pages while preserving page-local provenance.
+
+    This is the baseline PDF extractor. It intentionally handles only native
+    text extraction. Scanned/image-only pages remain available for the future
+    PDF Vision pipeline rather than being treated as successfully OCRed.
+    """
+    import fitz
+
+    try:
+        document = fitz.open(stream=data, filetype="pdf")
+    except Exception as exc:
+        raise ValueError("PDF_PARSE_ERROR") from exc
+
+    blocks: list[NormalizedBlock] = []
+
+    try:
+        for page_index, page in enumerate(document, start=1):
+            page_blocks = page.get_text("blocks", sort=True)
+            text_block_index = 0
+
+            for block in page_blocks:
+                if len(block) < 5:
+                    continue
+
+                text = str(block[4]).strip()
+                if not text:
+                    continue
+
+                text_block_index += 1
+                blocks.append(
+                    NormalizedBlock(
+                        block_id=f"pdf-p{page_index:04d}-b{text_block_index:04d}",
+                        block_type="text",
+                        content=text,
+                        page=page_index,
+                        confidence=1.0,
+                        provenance={
+                            "source_format": "pdf",
+                            "page": page_index,
+                            "block_index": text_block_index,
+                            "bbox": [
+                                float(block[0]),
+                                float(block[1]),
+                                float(block[2]),
+                                float(block[3]),
+                            ],
+                            "extraction": "pymupdf_text",
+                        },
+                    )
+                )
+    except Exception as exc:
+        raise ValueError("PDF_EXTRACT_ERROR") from exc
+    finally:
+        document.close()
+
+    return blocks
 
 
 def _decode_text(data: bytes) -> str:
@@ -311,7 +372,15 @@ def _extract_pptx(filename: str, data: bytes) -> list[NormalizedBlock]:
     blocks: list[NormalizedBlock] = []
 
     for slide_index, slide in enumerate(presentation.slides, start=1):
-        title = slide.shapes.title.text.strip() if slide.shapes.title else None
+        title_shape = slide.shapes.title
+        title = title_shape.text.strip() if title_shape else None
+        title_shape_index = None
+        if title_shape is not None:
+            for candidate_index, candidate in enumerate(slide.shapes, start=1):
+                if candidate.shape_id == title_shape.shape_id:
+                    title_shape_index = candidate_index
+                    break
+
         section = title or f"Slide {slide_index}"
         block_index = 0
 
@@ -325,7 +394,7 @@ def _extract_pptx(filename: str, data: bytes) -> list[NormalizedBlock]:
                     blocks.append(
                         NormalizedBlock(
                             block_id=f"pptx-s{slide_index:04d}-b{block_index:04d}",
-                            block_type="heading" if shape is slide.shapes.title else "text",
+                            block_type="heading" if shape_index == title_shape_index else "text",
                             content=text,
                             page=slide_index,
                             section=section,

@@ -44,6 +44,7 @@ def _media_type(filename: str) -> str:
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".pdf": "application/pdf",
     }.get(Path(filename).suffix.lower(), "application/octet-stream")
 
 
@@ -81,7 +82,7 @@ async def ingest_document(
         validate_extension(filename, settings.allowed_suffixes)
 
         jobs[ingestion_id]["status"] = DocumentStatus.SECURITY_CHECK
-        warnings = security_scan(data)
+        warnings = security_scan(data, Path(filename).suffix.lower())
 
         jobs[ingestion_id]["status"] = DocumentStatus.ROUTING
         jobs[ingestion_id]["status"] = DocumentStatus.EXTRACTING

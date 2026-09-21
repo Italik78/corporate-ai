@@ -1,4 +1,6 @@
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+import secrets
+
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 
 from .config import settings
 from .metadata import (
@@ -68,6 +70,53 @@ async def ingest(
     )
     if result.status.value.startswith("FAILED"):
         raise HTTPException(status_code=422, detail=result.model_dump())
+    return result
+
+
+@app.post("/v1/integrations/paperless/webhook")
+async def paperless_webhook(
+    file: UploadFile = File(...),
+    document_id: str | None = Form(default=None),
+    document_date: str | None = Query(default=None),
+    author: str | None = Query(default=None),
+    classification: str = Query(default="INTERNAL"),
+    access_scope: str = Query(default="INTERNAL"),
+    tags: str | None = Query(default=None),
+    x_corporate_ai_webhook: str | None = Header(default=None),
+):
+    configured_secret = settings.paperless_webhook_secret
+
+    if not configured_secret:
+        raise HTTPException(status_code=503, detail="PAPERLESS_WEBHOOK_NOT_CONFIGURED")
+
+    if not x_corporate_ai_webhook or not secrets.compare_digest(
+        x_corporate_ai_webhook,
+        configured_secret,
+    ):
+        raise HTTPException(status_code=401, detail="INVALID_WEBHOOK_SECRET")
+
+    if not document_id:
+        raise HTTPException(status_code=400, detail="PAPERLESS_DOCUMENT_ID_REQUIRED")
+
+    data = await file.read()
+    tag_values = [x.strip() for x in (tags or "").split(",") if x.strip()]
+
+    result = await ingest_document(
+        filename=file.filename or "",
+        data=data,
+        document_id=f"paperless:{document_id}",
+        source_system="paperless",
+        version=None,
+        document_date=document_date,
+        access_scope=access_scope,
+        author=author,
+        classification=classification,
+        tags=tag_values,
+    )
+
+    if result.status.value.startswith("FAILED"):
+        raise HTTPException(status_code=422, detail=result.model_dump())
+
     return result
 
 

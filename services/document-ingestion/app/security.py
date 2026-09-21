@@ -20,9 +20,13 @@ def validate_extension(filename: str, allowed: set[str]) -> str:
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
-def security_scan(data: bytes) -> list[str]:
+def security_scan(data: bytes, suffix: str | None = None) -> list[str]:
     # Extension/size/path checks are implemented here. AV integration is a deployment hook.
-    warnings=[]
-    if b"\x00" in data[:4096]:
+    # NUL bytes are expected in binary document formats such as PDF, DOCX, XLSX and PPTX.
+    warnings = []
+
+    text_suffixes = {".txt", ".md", ".markdown", ".csv"}
+    if suffix in text_suffixes and b"\x00" in data[:4096]:
         warnings.append("BINARY_NUL_DETECTED")
+
     return warnings
