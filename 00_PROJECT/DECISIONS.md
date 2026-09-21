@@ -36,6 +36,13 @@
 29. A self-hosted SearXNG deployment is the first candidate for controlled web search; a hosted search provider remains an alternative if quality/reliability requires it.
 30. Documentation and plans are not implementation: Open WebUI integration and Web Search become complete only after DGX runtime validation.
 
+## 2026-09-21 — Validated Document Ingestion / Paperless path
+
+38. Document Ingestion Service 0.3.0 is the normalized ingestion boundary for TXT, Markdown, CSV, DOCX, XLSX, PPTX and PDF.
+39. Paperless-ngx integrates through the dedicated webhook boundary; Tika 3.3.1 and Gotenberg are the validated extraction/conversion components.
+40. Real Paperless → Document Ingestion → Qdrant/Knowledge Engine flows are validated for TXT, DOCX and XLSX, with provenance preserved.
+41. A Paperless webhook timeout was observed after successful XLSX processing; this is tracked as a non-blocking timeout/acknowledgement hardening item.
+
 ## 2026-09-20 — Corporate Information System direction
 
 31. The product target is a **Corporate Information System**. Open WebUI is the primary user workspace, not merely a chat frontend.
