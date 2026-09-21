@@ -1,6 +1,6 @@
 # CURRENT STATUS
 
-**Checkpoint:** 2026-09-19
+**Checkpoint:** 2026-09-21
 
 ## Project
 
@@ -57,8 +57,9 @@ Architecture decision:
 - MinIO is the planned production Object Storage on **AI-DATA-01**, not on DGX Spark.
 - Original documents remain in Object Storage; Qdrant is an index, not the source of truth.
 
-New architecture document:
+New architecture documents:
 - `04_KNOWLEDGE/DOCUMENT_INGESTION_SERVICE.md`
+- `04_KNOWLEDGE/DOCUMENT_AND_KNOWLEDGE_ARCHITECTURE.md`
 
 ## Infrastructure
 
@@ -82,18 +83,29 @@ Completed:
 - SUPPORTED / CONFLICT / INSUFFICIENT_EVIDENCE handling.
 - Grounded RAG validation.
 - Knowledge Engine 0.3.1 stabilization.
-- Document Ingestion Service architecture definition.
+- Document Ingestion Service skeleton and metadata/version registry.
+- TXT/Markdown/DOCX/XLSX/PPTX/CSV extraction foundation.
+- Deterministic chunking and SHA-256/version foundation.
+- Knowledge Engine `/v1/ingest` integration.
+- End-to-end ingestion and Qdrant indexing validation.
+- PDF native-text extraction with page/block provenance.
+- PDF ingestion → Knowledge Engine → Qdrant E2E validation.
+- Paperless-ngx integration endpoint and webhook authentication foundation.
+- Paperless webhook workflow investigation; exact Paperless webhook action path and placeholder syntax verified.
+
+Current work:
+- Paperless-ngx → Document Ingestion webhook E2E is not yet accepted.
+- Paperless workflow currently needs final webhook payload configuration/debugging.
+- Paperless DOCX/XLSX MIME acceptance still needs configuration if those formats are to enter through Paperless.
+- PDF Vision/OCR integration remains after native PDF extraction.
 
 Immediate next steps:
-1. Implement Document Ingestion Service skeleton.
-2. TXT/Markdown parser.
-3. Normalized document model.
-4. SHA-256 deduplication/version foundation.
-5. Deterministic chunker.
-6. Integration with Knowledge Engine `/v1/ingest`.
-7. End-to-end TXT/Markdown test.
-8. Then DOCX/XLSX/PPTX/CSV.
-9. Then PDF/OCR/Vision integration.
+1. Fix and validate Paperless webhook E2E with a TXT test.
+2. Verify `paperless:<document_id>` version registration and Qdrant indexing.
+3. Configure/validate Paperless support for DOCX/XLSX if required.
+4. Run several real documents through Paperless → Document Ingestion → Knowledge Engine.
+5. Integrate PDF/OCR/Vision into Document Ingestion Service.
+6. Update project documentation/status after acceptance.
 
 ## Runtime cleanup note
 
