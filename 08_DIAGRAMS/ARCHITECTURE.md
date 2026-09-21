@@ -20,6 +20,10 @@ Document Knowledge Flow
 
 Original File / Object Storage
 ↓
+Paperless / Upload / API
+↓
+Document Ingestion
+↓
 Security
 ↓
 Router
@@ -43,6 +47,8 @@ Agent Context
 Qwen3.6
 
 Large documents are processed through bounded retrieval or planned section-by-section analysis. Original files remain outside Qdrant.
+
+Paperless-ngx integrates through a controlled webhook boundary; Tika/Gotenberg handle Office extraction/conversion before Document Ingestion.
 
 Infrastructure: DGX Spark → NVIDIA Container Runtime → services on ai-net.
 
