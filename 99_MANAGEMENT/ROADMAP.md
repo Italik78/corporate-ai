@@ -93,7 +93,11 @@ Implemented:
 - [x] Knowledge Engine handoff through normalized chunks
 
 Pending:
-- [ ] DGX build and end-to-end ingestion/RAG validation
+- [x] DGX build and end-to-end ingestion/RAG validation
+- [x] PDF native extraction with page/block/bbox provenance
+- [x] Paperless-ngx webhook integration
+- [x] Tika 3.3.1 + Gotenberg Office conversion path
+- [x] TXT/DOCX/XLSX Paperless → Document Ingestion → Qdrant/Knowledge Engine validation
 - [ ] validate Open WebUI upload integration with Document Ingestion
 - [ ] validate production retrieval path without Open WebUI independent file-* vector collections
 
@@ -202,7 +206,8 @@ Completed:
 - TABLE, VISUAL and COMPLEX page handling.
 
 Next:
-- Integrate PDF/OCR/Vision into Document Ingestion Service.
+- Integrate OCR/Vision into Document Ingestion Service.
+- Connect the already validated PDF native extraction path to the multimodal flow where OCR/Vision is required.
 - Ground visual/table extraction into Knowledge Engine.
 - Propagate confidence and uncertainty.
 
@@ -238,6 +243,7 @@ Security; backups; recovery; evaluation; observability; performance/resource tun
 
 Focus:
 - secret management and tool authentication.
+- harden Paperless webhook acknowledgement/timeout behavior.
 - backup/recovery validation.
 - evaluation suite.
 - observability.
