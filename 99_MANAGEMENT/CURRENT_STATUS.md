@@ -1,6 +1,6 @@
 # CURRENT STATUS
 
-**Checkpoint:** 2026-09-20
+**Checkpoint:** 2026-09-21
 
 ## Project
 
@@ -107,7 +107,14 @@ Completed:
 - Grounded RAG validation.
 - Knowledge Engine 0.3.1 stabilization.
 - Document Ingestion Service architecture and metadata/version foundation.
+- Document Ingestion Service 0.3.0 supports TXT, Markdown, CSV, DOCX, XLSX, PPTX and PDF.
+- Paperless-ngx webhook ingestion validated with document ID, secret header and source provenance.
+- PDF security intake false-positive for binary NUL bytes corrected; unit suite passed 17 tests.
 - Office/tabular extraction implementation.
+- Document Ingestion Service 0.3.0 runtime and unit validation.
+- PDF native extraction with PyMuPDF 1.26.4, including page/block/bbox provenance.
+- Paperless-ngx integration with Tika 3.3.1 and Gotenberg validated.
+- Paperless → Document Ingestion → Knowledge Engine/Qdrant E2E validated for TXT, DOCX and XLSX.
 - Open WebUI architecture and Web Search baseline.
 - Open WebUI confirmed on `ai-net`.
 
@@ -159,4 +166,15 @@ Older Knowledge Engine test containers remain on the DGX during validation. They
 
 The Document Ingestion module includes persistent PostgreSQL metadata/version tracking, SHA-256 deduplication, automatic version increment when version 1 is re-submitted for an existing document, lifecycle states INGESTING/CURRENT/SUPERSEDED/ARCHIVED, document relationships, effective dates, project/access metadata, version metadata propagation to Qdrant, and version/lifecycle-aware Knowledge Engine filters.
 
-Status: implementation complete; broader Phase B acceptance and Open WebUI integration remain pending.
+Status: implementation complete; PDF/Office/Paperless runtime validation is complete for the validated paths; broader Phase B acceptance and Open WebUI integration remain pending.
+
+## Paperless-ngx integration — validated
+
+Paperless-ngx is connected to Document Ingestion through the dedicated webhook boundary. Tika 3.3.1 is used for text extraction and Gotenberg for Office-to-PDF conversion. Real documents were validated through Paperless → Document Ingestion → normalized chunks → embeddings → Qdrant/Knowledge Engine.
+
+Validated examples:
+- TXT: Paperless document ID 8 → `paperless:8` → Knowledge Engine retrieval.
+- DOCX: Paperless document ID 10 → successful conversion/webhook → `paperless:10` retrieval with text provenance.
+- XLSX: Paperless document ID 11 → successful conversion/webhook → `paperless:11` retrieval with TABLE provenance.
+
+Known non-blocking observation: one XLSX test produced a Paperless webhook timeout log after the Document Ingestion service had already processed the request successfully. The current Paperless webhook client uses a short 5-second timeout; asynchronous acknowledgement/timeout hardening remains a future improvement.
