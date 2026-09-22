@@ -21,6 +21,7 @@
 - long-running task memory/state
 - skill registry and lifecycle
 - prompt registry and versioning
+- model registry and reproducible runtime configuration
 - provenance and audit
 - human approval for high-impact actions
 - task status/cancel/result API
@@ -37,6 +38,10 @@ Memory must be scoped, permission-aware, provenance-aware, relevant before injec
 ## Skills and prompts
 
 Skills and prompts must be versioned, testable, auditable, permission/policy aware and reproducible. Production versions are immutable.
+
+## Models
+
+Production models must have versioned registry records, local artifacts, reproducible runtime configuration, health checks, validation results and rollback targets.
 
 ## Long-running tasks
 
