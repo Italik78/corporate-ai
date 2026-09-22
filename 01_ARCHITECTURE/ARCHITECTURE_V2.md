@@ -1,13 +1,81 @@
 # ARCHITECTURE V2
 
-Open WebUI → Corporate AI Gateway → Intent/Task Router → Qwen3.6 / Knowledge / Tools / Vision.
+## Top-level
 
-Knowledge: query → embedding → parallel retrieval → metadata filtering → vector/keyword/graph evidence → conditional reranking → evidence fusion → context builder → Qwen3.6 → grounded response + sources.
+```
+User / API / Automation
+        ↓
+Corporate AI Gateway
+        ↓
+AI Agent / Orchestrator
+        ↓
+┌────────────┬──────────────┬────────────┬──────────────┐
+│ Knowledge  │ Web Research │ Tools      │ Document     │
+│ + Evidence │ + Evidence   │ Gateway    │ + Vision     │
+└────────────┴──────────────┴────────────┴──────────────┘
+        ↓
+Evidence / Provenance
+        ↓
+Qwen3.6
+        ↓
+Validation / citations / response
+```
 
-Agent: Qwen3.6 → Agent Controller → Tool Gateway → validated tools. Every tool has schema, policy, validation, logging and traceability.
+## Gateway
 
-Document flow: input → classifier/router → specialized extraction → normalized structure → chunking → metadata → embeddings → Qdrant/Graph.
+Auth, identity, ACL, session, policy, audit, request validation, task submission and rate/concurrency controls.
 
-Operational layer: NVIDIA DGX Dashboard handles system-level monitoring and JupyterLab. Corporate AI Console handles application topology, health, dependencies, logs and resource state.
+## Agent / Orchestrator
 
-Deployment: declarative service definitions, persistent volumes, health checks, explicit networks, resource limits, version pinning and documented recovery.
+Planning, intent classification, context assembly, memory retrieval/write decisions, skill selection, prompt selection, retrieval, Web Research, tools, task checkpoints and final validation.
+
+## Memory
+
+Separate scoped stores for short-term conversation, long-term conversation, project memory, long-running task state and optional user preferences.
+
+Corporate documents remain canonical Knowledge Repository content.
+
+## Skills and prompts
+
+Skills are versioned capability contracts. Prompts are versioned artifacts referenced by skills/tasks. Production versions are immutable.
+
+## Knowledge
+
+Repository → ingestion → normalized structure → embeddings → Qdrant → retrieval → conditional reranking → evidence fusion → context builder → Qwen3.6.
+
+## Web Research
+
+Agent → Web Research Service → search/fetch/extraction/sanitization/provenance → Web Evidence → Evidence Engine → Qwen3.6.
+
+Qwen3.6 has no unrestricted Internet access.
+
+## Tools
+
+Agent → Tool Gateway → policy/ACL/schema/approval → tool execution → validated result → provenance/audit.
+
+## Document intelligence
+
+Input → security intake → classifier/router → extraction/OCR/Vision → normalized structure → metadata/versioning → chunking → Knowledge Engine.
+
+## Long-running tasks
+
+Gateway/Agent → Task Engine → durable plan/state/checkpoints/events → workers → evidence/artifacts → result.
+
+## Evidence
+
+Common model for internal and Web evidence:
+- SUPPORTED
+- CONFLICT
+- INSUFFICIENT_EVIDENCE
+
+The LLM does not silently resolve conflicts.
+
+## Operational layer
+
+NVIDIA DGX Dashboard handles system-level operations. Corporate AI Console handles application topology, health, dependencies, logs and resource state.
+
+## Deployment
+
+Phase 1: one DGX Spark with explicit resource budgets.
+
+Future: distribute LLM workers, CPU services, data services and task workers across multiple servers while preserving API contracts.
