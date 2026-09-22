@@ -123,7 +123,10 @@ Prompt records are:
 
 Prompt content from untrusted documents or Web pages never overrides system policy.
 
-### 5. Long-running tasks
+### 5. Model Registry
+All production models and runtime configurations are versioned through a Model Registry. Model selection is limited to approved registry records. Qwen3.6 is the initial primary production model; embedding and reranking models are registered separately.
+
+### 6. Long-running tasks
 Tasks are durable jobs with:
 - task_id
 - owner
@@ -140,13 +143,13 @@ Tasks are durable jobs with:
 
 Tasks may continue after the chat request ends.
 
-### 6. Knowledge
+### 7. Knowledge
 The Knowledge Repository is the source of truth for corporate documents. Qdrant is a retrieval index.
 
 Flow:
 Repository → Ingestion → normalized content → embeddings → Qdrant → retrieval → evidence → Qwen3.6.
 
-### 7. Web Research
+### 8. Web Research
 Web access is a controlled capability. Qwen3.6 does not receive unrestricted Internet access.
 
 Research uses:
@@ -161,7 +164,7 @@ Research uses:
 - provenance
 - evidence assessment
 
-### 8. Tools
+### 9. Tools
 Tools execute outside the LLM and are protected by:
 - schema validation
 - policy
@@ -171,7 +174,7 @@ Tools execute outside the LLM and are protected by:
 - audit
 - provenance
 
-### 9. Evidence
+### 10. Evidence
 Evidence is a common layer for both internal knowledge and Web Research.
 
 Minimum states:
@@ -181,7 +184,7 @@ Minimum states:
 
 The system must not silently choose a winner between conflicting sources.
 
-### 10. Security
+### 11. Security
 Security boundaries are enforced before information reaches the LLM:
 - identity
 - ACL
@@ -192,6 +195,9 @@ Security boundaries are enforced before information reaches the LLM:
 - secrets
 - audit
 - untrusted-input isolation
+
+## Evaluation and feedback
+The platform records measurable outcomes for retrieval, evidence, research, memory, tools and tasks. Human feedback may enter evaluation workflows, but user feedback is not automatically treated as truth or used to retrain a production model.
 
 ## Data ownership
 
