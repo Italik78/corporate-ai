@@ -2,7 +2,7 @@
 
 ## Phase 1 — Baseline
 
-Verify DGX post-update; inventory containers, images, volumes, networks and configs; preserve existing data.
+Verify DGX; inventory containers, images, volumes, networks and configs; preserve existing data.
 
 **Status: COMPLETE**
 
@@ -12,7 +12,7 @@ Declarative service definitions; Qwen3.6; health checks; resource policies.
 
 **Status: COMPLETE**
 
-## Phase 3 — Knowledge
+## Phase 3 — Knowledge and Evidence
 
 Embedding; Qdrant; Knowledge Engine; RAG; evidence evaluation; universal ingestion.
 
@@ -20,87 +20,125 @@ Embedding; Qdrant; Knowledge Engine; RAG; evidence evaluation; universal ingesti
 
 Completed:
 - Qwen3-Embedding-4B production configuration and API validation.
-- Qdrant `corporate_knowledge` collection and persistence validation.
-- Knowledge Engine with search, ingest, health and end-to-end RAG query.
-- Grounded positive query and insufficient-evidence negative query.
-- Initial conflict retrieval test.
+- Qdrant corporate_knowledge collection and persistence validation.
+- Knowledge Engine search/ingest/query.
+- grounded positive query and insufficient-evidence negative query.
+- conflict retrieval.
 - Evidence Engine with SUPPORTED / CONFLICT / INSUFFICIENT_EVIDENCE.
-- Evidence claims with source IDs.
-- Evidence integration into `/v1/query`.
+- evidence claims with source IDs.
+- normalized RAG response contract.
 - Knowledge Engine 0.3.1 test runtime validation.
-- Normalized RAG response contract.
-- Git hygiene for runtime data and backup files.
-
-Current limitation:
-- Conflict detection is a numeric candidate detector, not a final semantic conflict resolver.
-- Retrieval quality and reranking remain separate tasks.
-- Paperless webhook E2E is still being validated.
-- PDF native-text extraction is implemented; OCR/Vision integration remains.
+- initial universal ingestion foundation.
 
 Next:
-1. Complete Paperless → Document Ingestion webhook E2E.
-2. Validate version registration and Qdrant indexing through Paperless.
-3. Configure/validate Paperless DOCX/XLSX support if required.
-4. Integrate PDF/OCR/Vision into Document Ingestion.
-5. Complete claims/provenance and partial-answer handling.
-6. Conditional reranking/evidence fusion.
-7. Improve semantic conflict detection.
-8. Evaluate knowledge graph for procedural/organizational relationships.
+1. Finish document repository lifecycle integration.
+2. Complete document ingestion for all target formats.
+3. Complete provenance/version/delete propagation.
+4. Conditional reranking/evidence fusion.
+5. Improve semantic conflict detection.
+6. Validate ACL filtering before context construction.
+7. Evaluate knowledge graph where it provides measurable value.
 
-## Phase 4 — Multimodal
+## Phase 4 — Multimodal Document Intelligence
 
-Vision; PDF/image pipeline; structured extraction.
+PDF/OCR/Vision; images; structured extraction; table/visual grounding.
 
 **Status: FOUNDATION VALIDATED / INTEGRATION IN PROGRESS**
 
 Completed:
-- PDF classifier/router/preprocessor pipeline prototypes.
+- PDF classifier/router/preprocessor prototypes.
 - Qwen3.6 Vision API validation.
-- Structured Vision JSON validation.
+- structured Vision JSON validation.
 - TABLE, VISUAL and COMPLEX page handling.
-- Native PDF text extraction with PyMuPDF and page/block provenance.
+- native PDF extraction with provenance.
 - PDF → chunk → embedding → Qdrant E2E validation.
 
 Next:
-- Integrate PDF/OCR/Vision into Document Ingestion Service.
-- Ground visual/table extraction into Knowledge Engine.
-- Propagate confidence and uncertainty.
+- integrate OCR/Vision into Document Ingestion.
+- ground visual/table extraction.
+- propagate confidence and uncertainty.
 
-## Phase 5 — Agent
+## Phase 5 — Platform Gateway and Agent
 
-Gateway; tool policy; Office tools; approval workflow; document lifecycle.
+Gateway; Agent/Orchestrator; policy; memory; skills; prompts; Task Engine; Tool Gateway.
 
-**Status: FOUNDATION / NOT YET INTEGRATED**
+**Status: ARCHITECTURE BASELINE / IMPLEMENTATION IN PROGRESS**
 
 Target:
+- Corporate AI Gateway.
 - Agent Controller.
+- short/long-term conversation memory.
+- Project Memory.
+- long-running Task API and durable state.
+- Skill Registry.
+- Prompt Registry.
 - Tool Policy and schema validation.
 - Office Tool Gateway.
-- Preview-before-side-effect workflow.
-- Word/Excel/PowerPoint/PDF generation and reading.
-- Traceability matrix and provenance.
+- human approval workflow.
+- provenance and audit.
 
-## Phase 6 — UI
+## Phase 6 — Controlled Web Research
 
-Open WebUI/Pipe; streaming/status events; Corporate AI Console.
+Research planner; search/fetch; source classification; evidence; cross-checking; citations; prompt-injection isolation.
+
+**Status: ARCHITECTURE BASELINE**
+
+Target:
+- controlled Internet access outside Qwen.
+- primary-source preference.
+- evidence/conflict handling.
+- research report generation.
+- long-running research tasks.
+
+## Phase 7 — User and Operations Layer
+
+Open WebUI/Pipe; streaming/status events; Corporate AI Console; monitoring.
 
 **Status: FOUNDATION**
 
-- Open WebUI selected as primary interaction layer.
-- Corporate AI Console defined for infrastructure/application status.
-- Avoid a parallel custom chat UI.
+## Phase 8 — End-to-End Demonstration
 
-## Phase 7 — Production
+Build representative workflows covering:
+- internal knowledge question
+- document analysis
+- Web Research
+- complex multi-step task
+- document generation
+- tool execution
+- long-running task
+- memory continuity
+- conflict/insufficient-evidence cases
 
-Security; backups; recovery; evaluation; observability; performance/resource tuning.
+**Goal:** demonstrate the complete Corporate AI value proposition on one DGX Spark.
+
+## Phase 9 — Evaluation and Production Readiness
+
+Measure:
+- factual correctness
+- groundedness
+- citation correctness
+- retrieval/reranking
+- Web Research quality
+- memory correctness/isolation
+- tool success
+- task reliability
+- latency
+- concurrency
+- CPU/RAM/GPU utilization
+- ingestion throughput
+- failure/recovery
 
 **Status: NOT COMPLETE**
 
-Focus:
-- secret management and tool authentication.
-- backup/recovery validation.
-- evaluation suite.
-- observability.
-- resource contention tests.
-- security hardening.
-- deployment reproducibility.
+## Phase 10 — Scale-out
+
+After measurable acceptance:
+- second DGX Spark
+- distributed LLM workers
+- CPU worker pools
+- dedicated database/object storage
+- gateway/application nodes
+- workload scheduling
+- multi-node networking
+
+Context size and concurrency are then tuned from measurements. A second DGX does not automatically increase the context window of one model instance.
