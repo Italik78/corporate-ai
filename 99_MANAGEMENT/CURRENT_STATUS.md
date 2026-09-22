@@ -1,10 +1,12 @@
 # CURRENT STATUS
 
-**Checkpoint:** 2026-09-21
+**Checkpoint:** 2026-09-22
 
 ## Project
 
 Corporate AI on NVIDIA DGX Spark GB10. GitHub repository is the source of truth.
+
+The architecture baseline now covers Gateway, Agent/Orchestrator, Knowledge/Evidence, controlled Web Research, document/vision pipeline, memory, skills, prompt registry, long-running tasks, tools, provenance/audit and scale-out.
 
 ## Runtime
 
@@ -12,29 +14,26 @@ Corporate AI on NVIDIA DGX Spark GB10. GitHub repository is the source of truth.
 - Ubuntu 24.04.x LTS, aarch64.
 - NVIDIA Driver 580.x, CUDA 13.x.
 - Docker + NVIDIA Container Toolkit.
-- Internal Docker network: `ai-net`.
+- Internal Docker network: ai-net.
 - Primary LLM: Qwen3.6-35B-A3B-NVFP4.
-- Qwen3.6: context 262144, GPU utilization 0.65, KV FP8, MTP 3, tool calling enabled, thinking disabled for standard mode.
-- Qwen3.6 Vision pipeline foundation is validated.
+- Qwen3.6 current runtime: context 262144, GPU utilization 0.65, KV FP8, MTP 3, tool calling enabled, thinking disabled for standard mode.
+- Phase 1 architectural target allows temporary 128K context to free resources for the complete platform. Runtime change is not yet recorded as applied.
+- Qwen3.6 Vision foundation is validated.
 
 ## Knowledge foundation
 
 - Qwen3-Embedding-4B, 2560 dimensions, local embedding service.
-- Qdrant collection: `corporate_knowledge`.
-- Active Knowledge Engine test release: **0.3.1**.
-- Active Knowledge Engine host API: `127.0.0.1:8093`.
-- Knowledge Engine endpoints:
-  - `/health`
-  - `/v1/search`
-  - `/v1/ingest`
-  - `/v1/query`
+- Qdrant collection: corporate_knowledge.
+- Active Knowledge Engine test release: 0.3.1.
+- Active Knowledge Engine host API: 127.0.0.1:8093.
 - End-to-end grounded RAG is validated.
 - Insufficient evidence returns a controlled no-answer response.
 - Deliberate conflicting claims are retrieved together without silently selecting a winner.
+- CPU reranker remains an intentional architecture component because unified memory/GPU capacity is constrained.
 
 ## Document intelligence
 
-Target formats:
+Target:
 - PDF
 - DOCX / DOC
 - XLSX
@@ -44,32 +43,66 @@ Target formats:
 - PNG / JPEG / TIFF
 
 Validated foundation:
-- PDF classifier.
-- PDF router.
+- PDF classifier/router.
 - Vision preprocessor.
 - Qwen3.6 Vision adapter.
-- Structured Vision JSON output.
+- structured Vision JSON.
 - TABLE, VISUAL and COMPLEX page handling.
+- native PDF extraction with provenance.
+- PDF ingestion → Knowledge Engine → Qdrant E2E.
 
-Architecture decision:
-- Universal file ingestion is a separate **Document Ingestion Service**.
-- Knowledge Engine remains a normalized chunk → embedding → Qdrant/RAG service.
-- MinIO is the planned production Object Storage on **AI-DATA-01**, not on DGX Spark.
-- Original documents remain in Object Storage; Qdrant is an index, not the source of truth.
+Architecture:
+- Universal file ingestion is a separate Document Ingestion Service.
+- Knowledge Engine receives normalized chunks.
+- Original files remain in the repository/object storage; Qdrant is an index.
+- Repository implementation is still an explicit architectural choice and must provide folder/version/ACL/delete semantics.
 
-New architecture documents:
-- `04_KNOWLEDGE/DOCUMENT_INGESTION_SERVICE.md`
-- `04_KNOWLEDGE/DOCUMENT_AND_KNOWLEDGE_ARCHITECTURE.md`
+Paperless-ngx is removed from the target architecture and should not be reintroduced.
 
-## Infrastructure
+## Platform components — architecture baseline
 
-Planned Data Server:
-- Role: PostgreSQL, Vector DB, Object Storage.
-- Target: 16 CPU cores, 64 GB RAM, 2 TB NVMe.
-- 10 GbE and RAID are architectural requirements.
+### Gateway / Agent
+Defined:
+- Corporate AI Gateway
+- Agent/Orchestrator
+- context assembly
+- policy/ACL
+- tool gateway
+- long-running tasks
 
-Current verified DGX deployment does not contain MinIO.
-No production AI-DATA-01 runtime has been verified yet.
+Implementation is not yet complete.
+
+### Memory
+Defined:
+- short-term conversation memory
+- long-term conversation memory
+- Project Memory
+- task state/memory
+- optional user preference memory
+
+Implementation is not yet complete.
+
+### Skills / Prompts
+Defined:
+- Skill Registry
+- Prompt Registry
+- versioned contracts
+- lifecycle
+- tests
+- audit
+
+Implementation is not yet complete.
+
+### Web Research
+Defined:
+- controlled search/fetch
+- source classification
+- provenance
+- evidence/conflict handling
+- citation validation
+- prompt-injection isolation
+
+Implementation is not yet complete.
 
 ## Current phase
 
@@ -77,44 +110,41 @@ No production AI-DATA-01 runtime has been verified yet.
 
 Status: IN PROGRESS
 
-Completed:
-- Embedding and Qdrant foundation.
-- Knowledge Engine search/ingest/query.
-- SUPPORTED / CONFLICT / INSUFFICIENT_EVIDENCE handling.
-- Grounded RAG validation.
-- Knowledge Engine 0.3.1 stabilization.
-- Document Ingestion Service skeleton and metadata/version registry.
-- TXT/Markdown/DOCX/XLSX/PPTX/CSV extraction foundation.
-- Deterministic chunking and SHA-256/version foundation.
-- Knowledge Engine `/v1/ingest` integration.
-- End-to-end ingestion and Qdrant indexing validation.
-- PDF native-text extraction with page/block provenance.
-- PDF ingestion → Knowledge Engine → Qdrant E2E validation.
-- Paperless-ngx integration endpoint and webhook authentication foundation.
-- Paperless webhook workflow investigation; exact Paperless webhook action path and placeholder syntax verified.
-
-Current work:
-- Paperless-ngx → Document Ingestion webhook E2E is not yet accepted.
-- Paperless workflow currently needs final webhook payload configuration/debugging.
-- Paperless DOCX/XLSX MIME acceptance still needs configuration if those formats are to enter through Paperless.
-- PDF Vision/OCR integration remains after native PDF extraction.
+Current technical work should continue on the accepted Knowledge/Document path, while the new platform services are implemented around it.
 
 Immediate next steps:
-1. Fix and validate Paperless webhook E2E with a TXT test.
-2. Verify `paperless:<document_id>` version registration and Qdrant indexing.
-3. Configure/validate Paperless support for DOCX/XLSX if required.
-4. Run several real documents through Paperless → Document Ingestion → Knowledge Engine.
-5. Integrate PDF/OCR/Vision into Document Ingestion Service.
-6. Update project documentation/status after acceptance.
+1. Finish the document repository/integration decision and lifecycle contract.
+2. Complete document ingestion and provenance/version/delete propagation.
+3. Integrate PDF/OCR/Vision into Document Ingestion.
+4. Complete semantic evidence/conflict handling.
+5. Implement Gateway + Agent baseline.
+6. Implement Memory baseline.
+7. Implement Skill/Prompt registries.
+8. Implement durable Task API/state.
+9. Implement controlled Web Research.
+10. Integrate Office/Tool Gateway and approval flow.
+11. Build end-to-end benchmark scenarios.
+12. Measure system before scale-out.
 
-## Runtime cleanup note
+## Scale-out strategy
 
-Older Knowledge Engine test containers remain on the DGX during validation. They are not removed until the active 0.3.1 path is fully accepted.
+First prove the complete platform on one DGX Spark.
+
+Then, based on measurements:
+- add second DGX Spark
+- distribute LLM/vision workers
+- move CPU services to CPU nodes
+- move data services to dedicated storage/database nodes
+- add worker pools and scheduling
+
+The logical architecture must remain stable.
 
 ## Project rules
 
 - Status changes to DONE/COMPLETE only after real technical validation.
 - Documentation, plans and configuration alone do not count as implemented functionality.
 - Original documents are not stored in Qdrant.
-- Document content is untrusted input and never overrides system/tool policies.
+- Document and Web content are untrusted input and never override system/tool policies.
+- Memory does not automatically become corporate knowledge.
+- LLM output is not evidence by itself.
 - GitHub is the source of truth for project documentation.
