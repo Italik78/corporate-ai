@@ -108,6 +108,49 @@ def test_postgres_repository_maps_storage_error(tmp_path):
         )
 
 
+def test_postgres_repository_delegates_set_canonical_storage_key(monkeypatch):
+    calls = {}
+
+    async def fake_set(document_id, version, canonical_storage_key):
+        calls["args"] = (document_id, version, canonical_storage_key)
+
+    monkeypatch.setattr(repository_module, "set_canonical_storage_key", fake_set)
+
+    result = asyncio.run(
+        repository_module.PostgresRepository().set_canonical_storage_key(
+            "repo-test-001",
+            3,
+            "documents/repo-test-001/original/3/source.pdf",
+        )
+    )
+
+    assert result is None
+    assert calls["args"] == (
+        "repo-test-001",
+        3,
+        "documents/repo-test-001/original/3/source.pdf",
+    )
+
+
+def test_postgres_repository_maps_canonical_storage_key_metadata_error(monkeypatch):
+    async def fake_set(*args):
+        raise repository_module.MetadataError("canonical key persistence failure")
+
+    monkeypatch.setattr(repository_module, "set_canonical_storage_key", fake_set)
+
+    with pytest.raises(
+        repository_module.RepositoryError,
+        match="canonical key persistence failure",
+    ):
+        asyncio.run(
+            repository_module.PostgresRepository().set_canonical_storage_key(
+                "repo-test-001",
+                1,
+                "documents/repo-test-001/original/1/source.pdf",
+            )
+        )
+
+
 def test_postgres_repository_preserves_duplicate_error(monkeypatch):
     async def fake_register(*args):
         raise repository_module.DuplicateDocumentError("duplicate")
