@@ -13,6 +13,7 @@ from .metadata import (
     register_version,
 )
 from .models import DocumentMetadata, DocumentVersionResponse
+from .storage import CanonicalStorageError, FilesystemCanonicalStorage
 
 
 class RepositoryError(MetadataError):
@@ -22,10 +23,9 @@ class RepositoryError(MetadataError):
 class Repository(Protocol):
     """Canonical document repository contract used by ingestion.
 
-    The initial adapter deliberately delegates version/lifecycle persistence
-    to the existing metadata implementation. Canonical source storage,
-    ACLs, scopes, audit and object-storage adapters are added behind this
-    boundary in later phases.
+    Version/lifecycle metadata remains backed by PostgreSQL while canonical
+    source bytes are stored through the repository's storage adapter.
+    ACLs, scopes, audit and external repository adapters remain future phases.
     """
 
     async def register_version(
@@ -34,6 +34,29 @@ class Repository(Protocol):
         source_file: str,
         content_hash: str,
     ) -> DocumentMetadata: ...
+
+    async def store_canonical_source(
+        self,
+        document_id: str,
+        version: int,
+        filename: str,
+        data: bytes,
+        content_hash: str,
+    ) -> str: ...
+
+    async def read_canonical_source(
+        self,
+        document_id: str,
+        version: int,
+        filename: str,
+    ) -> bytes: ...
+
+    async def delete_canonical_source(
+        self,
+        document_id: str,
+        version: int,
+        filename: str,
+    ) -> None: ...
 
     async def finalize_version(
         self,
@@ -53,7 +76,10 @@ class Repository(Protocol):
 
 
 class PostgresRepository:
-    """Repository adapter backed by the existing PostgreSQL metadata store."""
+    """Repository adapter backed by PostgreSQL metadata and canonical storage."""
+
+    def __init__(self, storage: FilesystemCanonicalStorage | None = None):
+        self.storage = storage or FilesystemCanonicalStorage()
 
     async def register_version(
         self,
@@ -66,6 +92,47 @@ class PostgresRepository:
         except (DuplicateDocumentError, VersionConflictError):
             raise
         except MetadataError as exc:
+            raise RepositoryError(str(exc)) from exc
+
+    async def store_canonical_source(
+        self,
+        document_id: str,
+        version: int,
+        filename: str,
+        data: bytes,
+        content_hash: str,
+    ) -> str:
+        try:
+            return self.storage.store(
+                document_id=document_id,
+                version=version,
+                filename=filename,
+                data=data,
+                content_hash=content_hash,
+            )
+        except CanonicalStorageError as exc:
+            raise RepositoryError(str(exc)) from exc
+
+    async def read_canonical_source(
+        self,
+        document_id: str,
+        version: int,
+        filename: str,
+    ) -> bytes:
+        try:
+            return self.storage.read(document_id, version, filename)
+        except CanonicalStorageError as exc:
+            raise RepositoryError(str(exc)) from exc
+
+    async def delete_canonical_source(
+        self,
+        document_id: str,
+        version: int,
+        filename: str,
+    ) -> None:
+        try:
+            self.storage.delete(document_id, version, filename)
+        except CanonicalStorageError as exc:
             raise RepositoryError(str(exc)) from exc
 
     async def finalize_version(
