@@ -11,6 +11,7 @@ from .metadata import (
     get_version,
     list_versions,
     register_version,
+    set_canonical_storage_key,
 )
 from .models import DocumentMetadata, DocumentVersionResponse
 from .storage import CanonicalStorageError, FilesystemCanonicalStorage
@@ -43,6 +44,18 @@ class Repository(Protocol):
         data: bytes,
         content_hash: str,
     ) -> str: ...
+
+    async def set_canonical_storage_key(
+        self, document_id: str, version: int, canonical_storage_key: str
+    ) -> None: ...
+
+    async def set_canonical_storage_key(
+        self, document_id: str, version: int, canonical_storage_key: str
+    ) -> None:
+        try:
+            await set_canonical_storage_key(document_id, version, canonical_storage_key)
+        except MetadataError as exc:
+            raise RepositoryError(str(exc)) from exc
 
     async def read_canonical_source(
         self,
