@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     max_file_size_mb: int = 25
     knowledge_engine_url: str = "http://corporate-ai-knowledge-engine-0.3.1-test:8090"
     metadata_database_url: str = "postgresql://corporate_ai:corporate_ai@corporate-ai-postgres:5432/corporate_ai"
+    repository_storage_path: str = "/data/repository"
     ingest_timeout_seconds: float = 60.0
     allowed_extensions: str = ".txt,.md,.markdown,.csv,.docx,.xlsx,.pptx,.pdf"
     paperless_webhook_secret: str = ""
