@@ -6,12 +6,10 @@ from .chunker import chunk_document
 from .config import settings
 from .extractors import extract_document
 from .knowledge_client import KnowledgeEngineClient
-from .metadata import (
+from .repository import (
     DuplicateDocumentError,
     VersionConflictError,
-    fail_version,
-    finalize_version,
-    register_version,
+    repository,
 )
 from .models import (
     DocumentMetadata,
@@ -244,7 +242,7 @@ async def ingest_document(
         )
     except Exception as e:
         if registered_version is not None:
-            await fail_version(document_id, registered_version)
+            await repository.fail_version(document_id, registered_version)
         jobs[ingestion_id] = {
             "document_id": document_id,
             "version": registered_version or requested_version,
