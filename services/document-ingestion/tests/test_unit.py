@@ -22,7 +22,7 @@ def test_filename_and_extension():
 
 
 def test_markdown_extraction():
-    blocks = extract_text("# Заглавие\n\nТекст за документа.".encode("utf-8"))
+    blocks = extract_text("test.md", "# Заглавие\n\nТекст за документа.".encode("utf-8"))
     assert len(blocks) == 2
     assert blocks[0].block_type == "heading"
     assert blocks[1].section == "Заглавие"
