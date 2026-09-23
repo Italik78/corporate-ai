@@ -31,6 +31,7 @@ services:
       INGESTION_PORT: "8095"
       INGESTION_KNOWLEDGE_ENGINE_URL: "http://corporate-ai-knowledge-engine-0.3.1-test:8090"
       INGESTION_METADATA_DATABASE_URL: "postgresql://corporate_ai:corporate_ai@corporate-ai-postgres:5432/corporate_ai"
+      INGESTION_REPOSITORY_STORAGE_PATH: "/data/repository"
       INGESTION_MAX_FILE_SIZE_MB: "25"
       INGESTION_PAPERLESS_WEBHOOK_SECRET: "${PAPERLESS_WEBHOOK_SECRET}"
     ports:
@@ -44,9 +45,12 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
+    volumes:
+      - corporate_ai_document_repository:/data/repository
 
 volumes:
   corporate_ai_postgres_data:
+  corporate_ai_document_repository:
 
 networks:
   ai-net:
