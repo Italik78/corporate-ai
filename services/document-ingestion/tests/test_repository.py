@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from app import repository as repository_module
@@ -13,8 +15,7 @@ def _metadata(document_id: str = "repo-test-001") -> DocumentMetadata:
     )
 
 
-@pytest.mark.asyncio
-async def test_postgres_repository_delegates_register_version(monkeypatch):
+def test_postgres_repository_delegates_register_version(monkeypatch):
     expected = _metadata()
     calls = {}
 
@@ -24,42 +25,45 @@ async def test_postgres_repository_delegates_register_version(monkeypatch):
 
     monkeypatch.setattr(repository_module, "register_version", fake_register)
 
-    result = await repository_module.PostgresRepository().register_version(
-        _metadata(), "/tmp/source.pdf", "sha256:test"
+    result = asyncio.run(
+        repository_module.PostgresRepository().register_version(
+            _metadata(), "/tmp/source.pdf", "sha256:test"
+        )
     )
 
     assert result is expected
     assert calls["args"][1:] == ("/tmp/source.pdf", "sha256:test")
 
 
-@pytest.mark.asyncio
-async def test_postgres_repository_preserves_duplicate_error(monkeypatch):
+def test_postgres_repository_preserves_duplicate_error(monkeypatch):
     async def fake_register(*args):
         raise repository_module.DuplicateDocumentError("duplicate")
 
     monkeypatch.setattr(repository_module, "register_version", fake_register)
 
     with pytest.raises(repository_module.DuplicateDocumentError, match="duplicate"):
-        await repository_module.PostgresRepository().register_version(
-            _metadata(), "/tmp/source.pdf", "sha256:test"
+        asyncio.run(
+            repository_module.PostgresRepository().register_version(
+                _metadata(), "/tmp/source.pdf", "sha256:test"
+            )
         )
 
 
-@pytest.mark.asyncio
-async def test_postgres_repository_maps_metadata_error(monkeypatch):
+def test_postgres_repository_maps_metadata_error(monkeypatch):
     async def fake_register(*args):
         raise repository_module.MetadataError("database failure")
 
     monkeypatch.setattr(repository_module, "register_version", fake_register)
 
     with pytest.raises(repository_module.RepositoryError, match="database failure"):
-        await repository_module.PostgresRepository().register_version(
-            _metadata(), "/tmp/source.pdf", "sha256:test"
+        asyncio.run(
+            repository_module.PostgresRepository().register_version(
+                _metadata(), "/tmp/source.pdf", "sha256:test"
+            )
         )
 
 
-@pytest.mark.asyncio
-async def test_postgres_repository_delegates_lifecycle_operations(monkeypatch):
+def test_postgres_repository_delegates_lifecycle_operations(monkeypatch):
     expected = _metadata()
     calls = []
 
@@ -85,10 +89,10 @@ async def test_postgres_repository_delegates_lifecycle_operations(monkeypatch):
 
     repo = repository_module.PostgresRepository()
 
-    assert await repo.finalize_version("repo-test-001", 2) is expected
-    assert await repo.fail_version("repo-test-001", 2) is None
-    assert await repo.list_versions("repo-test-001") == []
-    assert await repo.get_version("repo-test-001", 2) is None
+    assert asyncio.run(repo.finalize_version("repo-test-001", 2)) is expected
+    assert asyncio.run(repo.fail_version("repo-test-001", 2)) is None
+    assert asyncio.run(repo.list_versions("repo-test-001")) == []
+    assert asyncio.run(repo.get_version("repo-test-001", 2)) is None
 
     assert calls == [
         ("finalize", "repo-test-001", 2),
@@ -98,16 +102,17 @@ async def test_postgres_repository_delegates_lifecycle_operations(monkeypatch):
     ]
 
 
-@pytest.mark.asyncio
-async def test_postgres_repository_maps_lifecycle_metadata_errors(monkeypatch):
+def test_postgres_repository_maps_lifecycle_metadata_errors(monkeypatch):
     async def fake_finalize(*args):
         raise repository_module.MetadataError("lifecycle failure")
 
     monkeypatch.setattr(repository_module, "finalize_version", fake_finalize)
 
     with pytest.raises(repository_module.RepositoryError, match="lifecycle failure"):
-        await repository_module.PostgresRepository().finalize_version(
-            "repo-test-001", 1
+        asyncio.run(
+            repository_module.PostgresRepository().finalize_version(
+                "repo-test-001", 1
+            )
         )
 
 
