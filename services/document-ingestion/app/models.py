@@ -48,6 +48,7 @@ class DocumentMetadata(BaseModel):
     superseded_by: str | None = None
     project_id: str | None = None
     access_scope: str = "INTERNAL"
+    canonical_storage_key: str | None = None
 
 
 class NormalizedBlock(BaseModel):
@@ -116,6 +117,7 @@ class DocumentVersionResponse(BaseModel):
     version: int
     source_file: str
     content_hash: str
+    canonical_storage_key: str | None = None
     source_system: str
     title: str
     author: str | None = None
@@ -132,3 +134,4 @@ class DocumentVersionResponse(BaseModel):
     access_scope: str
     created_at: str
     updated_at: str
+}
