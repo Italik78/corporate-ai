@@ -1,9 +1,11 @@
 import asyncio
+import hashlib
 
 import pytest
 
 from app import repository as repository_module
 from app.models import DocumentMetadata, LifecycleStatus
+from app.storage import CanonicalStorageError, FilesystemCanonicalStorage
 
 
 def _metadata(document_id: str = "repo-test-001") -> DocumentMetadata:
@@ -13,6 +15,47 @@ def _metadata(document_id: str = "repo-test-001") -> DocumentMetadata:
         created_at="2026-09-23T00:00:00+00:00",
         updated_at="2026-09-23T00:00:00+00:00",
     )
+
+
+def test_filesystem_storage_roundtrip(tmp_path):
+    storage = FilesystemCanonicalStorage(tmp_path)
+    data = b"canonical source"
+    digest = hashlib.sha256(data).hexdigest()
+
+    key = storage.store("repo-test-001", 2, "source.pdf", data, digest)
+
+    assert key == "documents/repo-test-001/original/2/source.pdf"
+    assert storage.read("repo-test-001", 2, "source.pdf") == data
+
+
+def test_filesystem_storage_rejects_path_traversal(tmp_path):
+    storage = FilesystemCanonicalStorage(tmp_path)
+    digest = hashlib.sha256(b"x").hexdigest()
+
+    with pytest.raises(CanonicalStorageError, match="INVALID_FILENAME"):
+        storage.store("repo-test-001", 1, "../source.pdf", b"x", digest)
+
+    with pytest.raises(CanonicalStorageError, match="INVALID_DOCUMENT_ID"):
+        storage.store("../repo-test-001", 1, "source.pdf", b"x", digest)
+
+
+def test_filesystem_storage_rejects_hash_mismatch(tmp_path):
+    storage = FilesystemCanonicalStorage(tmp_path)
+
+    with pytest.raises(CanonicalStorageError, match="CONTENT_HASH_MISMATCH"):
+        storage.store("repo-test-001", 1, "source.pdf", b"x", "sha256:not-the-file")
+
+
+def test_filesystem_storage_delete(tmp_path):
+    storage = FilesystemCanonicalStorage(tmp_path)
+    data = b"canonical source"
+    digest = hashlib.sha256(data).hexdigest()
+
+    storage.store("repo-test-001", 1, "source.pdf", data, digest)
+    storage.delete("repo-test-001", 1, "source.pdf")
+
+    with pytest.raises(CanonicalStorageError, match="CANONICAL_SOURCE_NOT_FOUND"):
+        storage.read("repo-test-001", 1, "source.pdf")
 
 
 def test_postgres_repository_delegates_register_version(monkeypatch):
@@ -33,6 +76,36 @@ def test_postgres_repository_delegates_register_version(monkeypatch):
 
     assert result is expected
     assert calls["args"][1:] == ("/tmp/source.pdf", "sha256:test")
+
+
+def test_postgres_repository_delegates_canonical_storage(tmp_path):
+    storage = FilesystemCanonicalStorage(tmp_path)
+    repo = repository_module.PostgresRepository(storage=storage)
+    data = b"repository source"
+    digest = hashlib.sha256(data).hexdigest()
+
+    key = asyncio.run(
+        repo.store_canonical_source(
+            "repo-test-001", 1, "source.pdf", data, digest
+        )
+    )
+
+    assert key == "documents/repo-test-001/original/1/source.pdf"
+    assert asyncio.run(
+        repo.read_canonical_source("repo-test-001", 1, "source.pdf")
+    ) == data
+
+
+def test_postgres_repository_maps_storage_error(tmp_path):
+    storage = FilesystemCanonicalStorage(tmp_path)
+    repo = repository_module.PostgresRepository(storage=storage)
+
+    with pytest.raises(repository_module.RepositoryError, match="CONTENT_HASH_MISMATCH"):
+        asyncio.run(
+            repo.store_canonical_source(
+                "repo-test-001", 1, "source.pdf", b"x", "sha256:not-the-file"
+            )
+        )
 
 
 def test_postgres_repository_preserves_duplicate_error(monkeypatch):
