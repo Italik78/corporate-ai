@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import io
 
@@ -6,7 +7,8 @@ import pytest
 from app.security import sha256_bytes, validate_filename, validate_extension
 from app.extractors import extract_document, extract_text
 from app.chunker import chunk_document
-from app.models import DocumentMetadata, NormalizedDocument
+from app.models import DocumentMetadata, LifecycleStatus, NormalizedDocument
+from app import pipeline
 
 
 def test_hash_deterministic():
@@ -20,7 +22,7 @@ def test_filename_and_extension():
 
 
 def test_markdown_extraction():
-    blocks = extract_text("test.md", "# Заглавие\n\nТекст за документа.".encode("utf-8"))
+    blocks = extract_text("# Заглавие\n\nТекст за документа.".encode("utf-8"))
     assert len(blocks) == 2
     assert blocks[0].block_type == "heading"
     assert blocks[1].section == "Заглавие"
@@ -211,7 +213,6 @@ def test_pptx_extraction():
     assert blocks[2].provenance["slide"] == 1
 
 
-
 def test_pdf_extraction():
     import fitz
 
@@ -232,6 +233,82 @@ def test_pdf_extraction():
     assert blocks[0].provenance["extraction"] == "pymupdf_text"
     assert len(blocks[0].provenance["bbox"]) == 4
 
+
 def test_unsupported_extractor():
     with pytest.raises(ValueError, match="UNSUPPORTED_FILE_TYPE"):
         extract_document("image.png", b"data")
+
+
+def test_pipeline_repository_knowledge_critical_path(monkeypatch):
+    calls = []
+
+    class FakeRepository:
+        async def register_version(self, metadata, source_file, content_hash):
+            calls.append(("register", metadata.document_id, source_file))
+            metadata.version = 1
+            return metadata
+
+        async def store_canonical_source(
+            self, document_id, version, filename, data, content_hash
+        ):
+            calls.append(("store", document_id, version, filename))
+            return f"documents/{document_id}/original/{version}/{filename}"
+
+        async def set_canonical_storage_key(
+            self, document_id, version, canonical_storage_key
+        ):
+            calls.append(("set_key", document_id, version, canonical_storage_key))
+
+        async def finalize_version(self, document_id, version):
+            calls.append(("finalize", document_id, version))
+            return DocumentMetadata(
+                document_id=document_id,
+                title="critical-path",
+                created_at="now",
+                updated_at="now",
+                version=version,
+                lifecycle_status=LifecycleStatus.CURRENT,
+            )
+
+        async def fail_version(self, document_id, version):
+            calls.append(("fail", document_id, version))
+
+        async def delete_canonical_source(self, document_id, version, filename):
+            calls.append(("delete", document_id, version, filename))
+
+    class FakeKnowledgeClient:
+        async def ingest(self, chunk):
+            calls.append(("index", chunk.document_id, chunk.version))
+
+        async def set_lifecycle_status(self, document_id, version, lifecycle_status):
+            calls.append(("lifecycle", document_id, version, lifecycle_status))
+            return {"status": "ok"}
+
+    monkeypatch.setattr(pipeline, "repository", FakeRepository())
+    monkeypatch.setattr(pipeline, "KnowledgeEngineClient", FakeKnowledgeClient)
+
+    result = asyncio.run(
+        pipeline.ingest_document(
+            filename="critical-path.txt",
+            data=b"Repository critical path",
+            document_id="critical-path-001",
+        )
+    )
+
+    assert result.status.value == "READY"
+    assert result.lifecycle_status.value == "CURRENT"
+    assert result.chunk_count == 1
+    assert result.indexed_count == 1
+    assert calls == [
+        ("register", "critical-path-001", "critical-path.txt"),
+        ("store", "critical-path-001", 1, "critical-path.txt"),
+        (
+            "set_key",
+            "critical-path-001",
+            1,
+            "documents/critical-path-001/original/1/critical-path.txt",
+        ),
+        ("index", "critical-path-001", 1),
+        ("finalize", "critical-path-001", 1),
+        ("lifecycle", "critical-path-001", 1, "CURRENT"),
+    ]
