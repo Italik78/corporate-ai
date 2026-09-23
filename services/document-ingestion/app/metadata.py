@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS document_versions (
     superseded_by TEXT,
     project_id TEXT,
     access_scope TEXT NOT NULL DEFAULT 'INTERNAL',
+    canonical_storage_key TEXT,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (document_id, version)
@@ -69,6 +70,9 @@ async def initialize_metadata() -> None:
             statement = statement.strip()
             if statement:
                 await conn.execute(statement)
+        await conn.execute(
+            "ALTER TABLE document_versions ADD COLUMN IF NOT EXISTS canonical_storage_key TEXT"
+        )
 
 
 async def health() -> bool:
@@ -86,6 +90,7 @@ def _row_to_model(row: dict[str, Any]) -> DocumentVersionResponse:
         version=row["version"],
         source_file=row["source_file"],
         content_hash=row["content_hash"],
+        canonical_storage_key=row["canonical_storage_key"],
         source_system=row["source_system"],
         title=row["title"],
         author=row["author"],
@@ -173,12 +178,12 @@ async def register_version(
                     tags, document_date, effective_from, effective_to,
                     lifecycle_status, parent_document_id, supersedes,
                     superseded_by, project_id, access_scope,
-                    created_at, updated_at
+                    canonical_storage_key, created_at, updated_at
                 )
                 VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s::jsonb, %s, %s, %s, 'INGESTING', %s, %s,
-                    NULL, %s, %s, %s, %s
+                    NULL, %s, %s, NULL, %s, %s
                 )
                 """,
                 (
@@ -212,6 +217,21 @@ async def register_version(
         }
     )
 
+
+async def set_canonical_storage_key(
+    document_id: str, version: int, canonical_storage_key: str
+) -> None:
+    async with await psycopg.AsyncConnection.connect(settings.metadata_database_url) as conn:
+        cur = await conn.execute(
+            """
+            UPDATE document_versions
+            SET canonical_storage_key = %s, updated_at = NOW()
+            WHERE document_id = %s AND version = %s
+            """
+            , (canonical_storage_key, document_id, version)
+        )
+        if cur.rowcount != 1:
+            raise MetadataError("DOCUMENT_VERSION_NOT_FOUND")
 
 async def finalize_version(document_id: str, version: int) -> DocumentMetadata:
     async with await psycopg.AsyncConnection.connect(settings.metadata_database_url) as conn:
@@ -294,6 +314,7 @@ async def finalize_version(document_id: str, version: int) -> DocumentMetadata:
         supersedes=data["supersedes"],
         project_id=data["project_id"],
         access_scope=data["access_scope"],
+        canonical_storage_key=data["canonical_storage_key"],
     )
 
 
