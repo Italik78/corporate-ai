@@ -73,6 +73,7 @@ async def ingest_document(
 
     content_hash = sha256_bytes(data)
     registered_version: int | None = None
+    canonical_storage_key: str | None = None
 
     try:
         filename = validate_filename(filename)
@@ -122,6 +123,19 @@ async def ingest_document(
         )
         registered_version = metadata.version
         jobs[ingestion_id]["version"] = registered_version
+
+        canonical_storage_key = await repository.store_canonical_source(
+            document_id=document_id,
+            version=registered_version,
+            filename=filename,
+            data=data,
+            content_hash=content_hash,
+        )
+        await repository.set_canonical_storage_key(
+            document_id=document_id,
+            version=registered_version,
+            canonical_storage_key=canonical_storage_key,
+        )
 
         # register_version() may resolve an automatically assigned version and
         # populate supersedes metadata. Chunk IDs must use the resolved version,
@@ -221,6 +235,10 @@ async def ingest_document(
         )
         if registered_version is not None:
             await repository.fail_version(document_id, registered_version)
+        if canonical_storage_key is not None:
+            await repository.delete_canonical_source(
+                document_id, registered_version, filename
+            )
         jobs[ingestion_id] = {
             "document_id": document_id,
             "version": registered_version or requested_version,
@@ -243,6 +261,13 @@ async def ingest_document(
     except Exception as e:
         if registered_version is not None:
             await repository.fail_version(document_id, registered_version)
+        if canonical_storage_key is not None:
+            try:
+                await repository.delete_canonical_source(
+                    document_id, registered_version, filename
+                )
+            except Exception:
+                pass
         jobs[ingestion_id] = {
             "document_id": document_id,
             "version": registered_version or requested_version,
