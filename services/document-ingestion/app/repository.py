@@ -49,14 +49,6 @@ class Repository(Protocol):
         self, document_id: str, version: int, canonical_storage_key: str
     ) -> None: ...
 
-    async def set_canonical_storage_key(
-        self, document_id: str, version: int, canonical_storage_key: str
-    ) -> None:
-        try:
-            await set_canonical_storage_key(document_id, version, canonical_storage_key)
-        except MetadataError as exc:
-            raise RepositoryError(str(exc)) from exc
-
     async def read_canonical_source(
         self,
         document_id: str,
@@ -124,6 +116,14 @@ class PostgresRepository:
                 content_hash=content_hash,
             )
         except CanonicalStorageError as exc:
+            raise RepositoryError(str(exc)) from exc
+
+    async def set_canonical_storage_key(
+        self, document_id: str, version: int, canonical_storage_key: str
+    ) -> None:
+        try:
+            await set_canonical_storage_key(document_id, version, canonical_storage_key)
+        except MetadataError as exc:
             raise RepositoryError(str(exc)) from exc
 
     async def read_canonical_source(
