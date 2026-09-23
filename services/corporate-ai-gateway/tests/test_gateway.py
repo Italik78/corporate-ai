@@ -89,3 +89,19 @@ def test_routing_context_uses_user_turns_only():
     assert "нашата политика" in context
     assert "А при нас как е?" in context
     assert "Измислен асистентски отговор" not in context
+
+def test_retrieval_rewrite_prompt_contains_conversation_and_current_question():
+    from app.main import retrieval_rewrite_prompt
+
+    messages = [
+        type("M", (), {"role": "user", "content": "Какви са основните функции на отдел ИКТС?"})(),
+        type("M", (), {"role": "assistant", "content": "Това е предишен отговор."})(),
+        type("M", (), {"role": "user", "content": "Тези функции следва ли да се допълнят?"})(),
+    ]
+
+    prompt = retrieval_rewrite_prompt(messages)
+
+    assert "Какви са основните функции на отдел ИКТС?" in prompt
+    assert "Тези функции следва ли да се допълнят?" in prompt
+    assert "предишен отговор" in prompt
+    assert "не добавяй факти" in prompt.lower()
