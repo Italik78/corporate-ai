@@ -117,7 +117,7 @@ async def ingest_document(
         )
 
         jobs[ingestion_id]["status"] = DocumentStatus.METADATA
-        metadata = await register_version(
+        metadata = await repository.register_version(
             metadata=metadata,
             source_file=filename,
             content_hash=content_hash,
@@ -157,7 +157,7 @@ async def ingest_document(
             except ValueError:
                 superseded_version = None
 
-        finalized = await finalize_version(document_id, metadata.version)
+        finalized = await repository.finalize_version(document_id, metadata.version)
 
         await client.set_lifecycle_status(
             document_id=document_id,
@@ -222,7 +222,7 @@ async def ingest_document(
             else DocumentStatus.FAILED_PARSING
         )
         if registered_version is not None:
-            await fail_version(document_id, registered_version)
+            await repository.fail_version(document_id, registered_version)
         jobs[ingestion_id] = {
             "document_id": document_id,
             "version": registered_version or requested_version,
