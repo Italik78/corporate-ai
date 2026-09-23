@@ -134,4 +134,3 @@ class DocumentVersionResponse(BaseModel):
     access_scope: str
     created_at: str
     updated_at: str
-}
