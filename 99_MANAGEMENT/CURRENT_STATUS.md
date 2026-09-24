@@ -74,21 +74,21 @@ Validated:
 - PostgreSQL health check and Document Ingestion container startup succeed.
 - A real XLSX processing request reaches the version/indexing path and creates an ingestion record and document version.
 
-Current integration blocker:
-- Real XLSX processing currently ends with `FAILED_INDEXING` and `INGESTION_ERROR` because downstream code accesses `DocumentVersionResponse.tags`, while the current `DocumentVersionResponse` contract has no `tags` field.
-- This is not yet resolved and must be diagnosed at the metadata/indexing contract boundary before changing the response model.
-- The duplicate detection fix itself is validated and must be preserved.
+Resolved validation incident:
+- The earlier `DocumentVersionResponse.tags` error belongs to ingestion records created before the current container restart.
+- Current source and runtime hashes for `pipeline.py` and `metadata.py` match.
+- No `tags` field was added to `DocumentVersionResponse` as a workaround.
 
-Current failed validation record:
-- ingestion_id: `7c3617ee-cee7-4db8-a664-b422afcd60a7`
-- document_id: `a7600cb4-5d2d-4e24-b9b9-b09b7f9fa3cb`
+Successful real-document acceptance:
+- ingestion_id: `6e220d34-abd9-46d0-99e5-befe4c97c4b0`
+- document_id: `21f10869-8162-4c4f-88b7-1f16be934a83`
 - version: `1`
-- status: `FAILED_INDEXING`
+- status: `READY`
 - lifecycle_status: `CURRENT`
-- error_code: `INGESTION_ERROR`
-- error: `DocumentVersionResponse object has no attribute tags`
+- `document_versions` contains the canonical storage key and `tags=[]`.
+- Knowledge Engine search returns indexed chunks for the document, including `TABLE` / `table` chunks from `Traceability Matrix`.
 
-The Document Ingestion Service is therefore not marked complete. End-to-end acceptance remains pending resolution of the `tags` contract and a successful real-document processing test.
+The validated XLSX path is therefore accepted for the current Document Ingestion foundation. Broader repository lifecycle semantics and format coverage remain open.
 
 ## Platform components — architecture baseline
 
@@ -144,10 +144,9 @@ Status: IN PROGRESS
 Current technical work should continue on the accepted Knowledge/Document path, while the new platform services are implemented around it.
 
 Immediate next steps:
-1. Diagnose and fix the DocumentVersionResponse / indexing `tags` contract.
-2. Complete real-document ingestion acceptance including metadata, versioning, chunking, indexing and final lifecycle status.
-3. Finish the document repository/integration decision and lifecycle contract.
-4. Complete document ingestion and provenance/version/delete propagation.
+1. Finish the document repository/integration decision and lifecycle contract.
+2. Complete document ingestion provenance/version/delete propagation.
+3. Integrate PDF/OCR/Vision into Document Ingestion.
 5. Integrate PDF/OCR/Vision into Document Ingestion.
 6. Complete semantic evidence/conflict handling.
 7. Implement Gateway + Agent baseline.
