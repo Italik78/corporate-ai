@@ -36,14 +36,18 @@ Completed:
 - Document Ingestion application compilation validation.
 - Document Ingestion image rebuild and container startup validation.
 - real XLSX processing reaches version/indexing and creates ingestion/document version records.
+- real XLSX end-to-end acceptance completed: ingestion `6e220d34-abd9-46d0-99e5-befe4c97c4b0` is `READY`, document version `v1` is `CURRENT`, canonical storage is populated, and Knowledge Engine search returns indexed chunks from the document.
+- the earlier `DocumentVersionResponse.tags` error was confirmed as belonging to a pre-restart runtime record; no schema workaround was introduced.
 
-Current blocker:
-- real XLSX end-to-end processing currently stops at `FAILED_INDEXING` / `INGESTION_ERROR` because downstream code accesses `DocumentVersionResponse.tags`, while the current response contract has no `tags` field.
-- The `tags` contract must be diagnosed and corrected before marking document ingestion complete.
+Current status:
+- Universal file ingestion foundation is accepted for the validated XLSX path.
+- Remaining work is repository lifecycle integration, broader format coverage and downstream provenance/delete propagation.
 
 Next:
-1. Diagnose and fix the DocumentVersionResponse / indexing `tags` contract.
-2. Complete real-document ingestion acceptance for metadata, versioning, chunking, indexing and lifecycle finalization.
+1. Finish document repository lifecycle integration.
+2. Complete provenance/version/delete propagation.
+3. Integrate PDF/OCR/Vision into Document Ingestion.
+4. Conditional reranking/evidence fusion.
 3. Finish document repository lifecycle integration.
 4. Complete provenance/version/delete propagation.
 5. Conditional reranking/evidence fusion.
