@@ -19,9 +19,18 @@ USER / API / AUTOMATION
        |      |      |      |
        v      v      v      v
  Knowledge   Web    Tools  Document
- + Evidence Research Gateway + Vision
-       |      |      |      |
-       +------+------+------+
+ + Evidence Research Gateway Ingestion
+       |      |      |       |
+       |      |      |       v
+       |      |      |  +-----------+
+       |      |      |  | Metadata  |
+       |      |      |  | Version   |
+       |      |      |  | Dedup     |
+       |      |      |  +-----+-----+
+       |      |      |        |
+       |      |      |        v
+       |      |      |  normalized chunks
+       +------+------+--------+
               |
               v
        +-------------+
@@ -41,10 +50,35 @@ USER / API / AUTOMATION
           RESPONSE
 ```
 
+## Document Ingestion boundary
+
+Document Ingestion is a separate service responsible for the controlled transition from an incoming file to normalized document/version data and downstream indexing.
+
+Current responsibilities:
+- accept supported document files
+- persist ingestion metadata
+- register document identity and version
+- calculate and use content hash for duplicate/version detection
+- preserve canonical document reference
+- normalize extracted content into blocks/chunks
+- pass normalized content to downstream Knowledge Engine/indexing
+- persist controlled failure status and error code
+- support lifecycle/version propagation
+
+Current implementation checkpoint:
+- PostgreSQL metadata/version persistence is active.
+- Duplicate lookup uses psycopg `dict_row`.
+- Duplicate-specific unit test passes.
+- Application compilation, image rebuild and container startup pass.
+- Real XLSX processing reaches the indexing stage.
+- End-to-end acceptance is still blocked by an unresolved `DocumentVersionResponse.tags` contract mismatch between metadata and downstream indexing.
+
+The response contract must be fixed from the actual metadata/indexing contract rather than by adding fields solely to suppress the current error.
+
 ## Data layer
 
 - Document Repository/Object Storage — canonical files
-- PostgreSQL — identity, memory, tasks, skills, prompts, audit
+- PostgreSQL — document identity/version metadata, memory, tasks, skills, prompts, audit
 - Qdrant — vector retrieval index
 
 ## Runtime
