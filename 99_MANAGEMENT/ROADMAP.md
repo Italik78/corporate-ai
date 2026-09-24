@@ -29,15 +29,27 @@ Completed:
 - normalized RAG response contract.
 - Knowledge Engine 0.3.1 test runtime validation.
 - initial universal ingestion foundation.
+- separate Document Ingestion Service foundation with PostgreSQL metadata/version persistence.
+- content-hash duplicate/version detection foundation.
+- duplicate lookup correction using psycopg `dict_row`.
+- duplicate-specific unit test validation: `1 passed, 23 deselected`.
+- Document Ingestion application compilation validation.
+- Document Ingestion image rebuild and container startup validation.
+- real XLSX processing reaches version/indexing and creates ingestion/document version records.
+
+Current blocker:
+- real XLSX end-to-end processing currently stops at `FAILED_INDEXING` / `INGESTION_ERROR` because downstream code accesses `DocumentVersionResponse.tags`, while the current response contract has no `tags` field.
+- The `tags` contract must be diagnosed and corrected before marking document ingestion complete.
 
 Next:
-1. Finish document repository lifecycle integration.
-2. Complete document ingestion for all target formats.
-3. Complete provenance/version/delete propagation.
-4. Conditional reranking/evidence fusion.
-5. Improve semantic conflict detection.
-6. Validate ACL filtering before context construction.
-7. Evaluate knowledge graph where it provides measurable value.
+1. Diagnose and fix the DocumentVersionResponse / indexing `tags` contract.
+2. Complete real-document ingestion acceptance for metadata, versioning, chunking, indexing and lifecycle finalization.
+3. Finish document repository lifecycle integration.
+4. Complete provenance/version/delete propagation.
+5. Conditional reranking/evidence fusion.
+6. Improve semantic conflict detection.
+7. Validate ACL filtering before context construction.
+8. Evaluate knowledge graph where it provides measurable value.
 
 ## Phase 4 — Multimodal Document Intelligence
 
