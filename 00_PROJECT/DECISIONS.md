@@ -45,7 +45,8 @@
 35. Duplicate/version detection uses document content hash and must be deterministic and idempotent.
 36. Duplicate lookup uses psycopg `dict_row` so database rows are consumed through named fields rather than positional assumptions.
 37. Duplicate detection is accepted at unit-test level, but the complete Document Ingestion Service is not accepted until a real document completes indexing and lifecycle finalization successfully.
-38. A current integration failure involving `DocumentVersionResponse.tags` must be resolved at the metadata/indexing contract boundary before changing the response schema by assumption.
+38. The `DocumentVersionResponse.tags` incident was traced to a stale pre-restart runtime, not to the current metadata/indexing contract. No response-schema workaround was introduced.
+39. Real XLSX ingestion acceptance requires metadata registration, canonical source persistence, chunk indexing and lifecycle finalization to be verified together; a READY/CURRENT record plus successful Knowledge Engine retrieval is the acceptance evidence.
 
 ## Current validation checkpoint
 
@@ -61,4 +62,4 @@
 - Candidate numeric conflict detector validated as a prototype, but deliberately not integrated into production query flow yet.
 - Document Ingestion duplicate lookup correction validated by targeted unit test.
 - Document Ingestion application compilation, image rebuild and container startup validated.
-- Real XLSX processing currently reaches indexing but fails on the unresolved `DocumentVersionResponse.tags` contract.
+- Real XLSX ingestion acceptance completed successfully after rebuilding/restarting the current Document Ingestion runtime: ingestion `6e220d34-abd9-46d0-99e5-befe4c97c4b0` reached `READY`, document version `v1` is `CURRENT`, canonical storage is populated, and Knowledge Engine retrieval returns indexed chunks.
