@@ -38,6 +38,15 @@
 31. Paperless-ngx is not part of the target architecture. Repository implementation remains an explicit abstraction; candidate repositories are evaluated separately.
 32. No component is considered production-ready from documentation alone; end-to-end acceptance is required.
 
+## 2026-09-24 — Document Ingestion implementation checkpoint
+
+33. Universal file ingestion is implemented as a separate Document Ingestion Service between canonical document storage and downstream Knowledge Engine indexing.
+34. Document metadata and version state are persisted in PostgreSQL; Qdrant remains an index and not canonical document storage.
+35. Duplicate/version detection uses document content hash and must be deterministic and idempotent.
+36. Duplicate lookup uses psycopg `dict_row` so database rows are consumed through named fields rather than positional assumptions.
+37. Duplicate detection is accepted at unit-test level, but the complete Document Ingestion Service is not accepted until a real document completes indexing and lifecycle finalization successfully.
+38. A current integration failure involving `DocumentVersionResponse.tags` must be resolved at the metadata/indexing contract boundary before changing the response schema by assumption.
+
 ## Current validation checkpoint
 
 - Qwen3.6 production configuration validated: 262144 context, GPU utilization 0.65, KV FP8, tool calling enabled.
@@ -50,3 +59,6 @@
 - Negative query correctly returns the controlled no-answer response.
 - Retrieval of a deliberate 60 EUR / 40 EUR conflict validated.
 - Candidate numeric conflict detector validated as a prototype, but deliberately not integrated into production query flow yet.
+- Document Ingestion duplicate lookup correction validated by targeted unit test.
+- Document Ingestion application compilation, image rebuild and container startup validated.
+- Real XLSX processing currently reaches indexing but fails on the unresolved `DocumentVersionResponse.tags` contract.
