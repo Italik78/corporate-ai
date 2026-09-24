@@ -1,6 +1,6 @@
 # CURRENT STATUS
 
-**Checkpoint:** 2026-09-22
+**Checkpoint:** 2026-09-24
 
 ## Project
 
@@ -59,6 +59,37 @@ Architecture:
 
 Paperless-ngx is removed from the target architecture and should not be reintroduced.
 
+### Document Ingestion Service — current implementation checkpoint
+
+The initial document ingestion service path is implemented and has been validated through unit and deployment checks.
+
+Validated:
+- PostgreSQL metadata persistence is active.
+- Document version registration is present.
+- Content-hash based duplicate/version detection is implemented.
+- Duplicate lookup was corrected to use psycopg `dict_row` row mapping.
+- Duplicate-specific unit test passes: `1 passed, 23 deselected`.
+- Application compilation passes with `compileall`.
+- Document Ingestion image rebuild succeeds.
+- PostgreSQL health check and Document Ingestion container startup succeed.
+- A real XLSX processing request reaches the version/indexing path and creates an ingestion record and document version.
+
+Current integration blocker:
+- Real XLSX processing currently ends with `FAILED_INDEXING` and `INGESTION_ERROR` because downstream code accesses `DocumentVersionResponse.tags`, while the current `DocumentVersionResponse` contract has no `tags` field.
+- This is not yet resolved and must be diagnosed at the metadata/indexing contract boundary before changing the response model.
+- The duplicate detection fix itself is validated and must be preserved.
+
+Current failed validation record:
+- ingestion_id: `7c3617ee-cee7-4db8-a664-b422afcd60a7`
+- document_id: `a7600cb4-5d2d-4e24-b9b9-b09b7f9fa3cb`
+- version: `1`
+- status: `FAILED_INDEXING`
+- lifecycle_status: `CURRENT`
+- error_code: `INGESTION_ERROR`
+- error: `DocumentVersionResponse object has no attribute tags`
+
+The Document Ingestion Service is therefore not marked complete. End-to-end acceptance remains pending resolution of the `tags` contract and a successful real-document processing test.
+
 ## Platform components — architecture baseline
 
 ### Gateway / Agent
@@ -113,18 +144,20 @@ Status: IN PROGRESS
 Current technical work should continue on the accepted Knowledge/Document path, while the new platform services are implemented around it.
 
 Immediate next steps:
-1. Finish the document repository/integration decision and lifecycle contract.
-2. Complete document ingestion and provenance/version/delete propagation.
-3. Integrate PDF/OCR/Vision into Document Ingestion.
-4. Complete semantic evidence/conflict handling.
-5. Implement Gateway + Agent baseline.
-6. Implement Memory baseline.
-7. Implement Skill/Prompt registries.
-8. Implement durable Task API/state.
-9. Implement controlled Web Research.
-10. Integrate Office/Tool Gateway and approval flow.
-11. Build end-to-end benchmark scenarios.
-12. Measure system before scale-out.
+1. Diagnose and fix the DocumentVersionResponse / indexing `tags` contract.
+2. Complete real-document ingestion acceptance including metadata, versioning, chunking, indexing and final lifecycle status.
+3. Finish the document repository/integration decision and lifecycle contract.
+4. Complete document ingestion and provenance/version/delete propagation.
+5. Integrate PDF/OCR/Vision into Document Ingestion.
+6. Complete semantic evidence/conflict handling.
+7. Implement Gateway + Agent baseline.
+8. Implement Memory baseline.
+9. Implement Skill/Prompt registries.
+10. Implement durable Task API/state.
+11. Implement controlled Web Research.
+12. Integrate Office/Tool Gateway and approval flow.
+13. Build end-to-end benchmark scenarios.
+14. Measure system before scale-out.
 
 ## Scale-out strategy
 
