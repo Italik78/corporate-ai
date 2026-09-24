@@ -70,10 +70,11 @@ Current implementation checkpoint:
 - Duplicate lookup uses psycopg `dict_row`.
 - Duplicate-specific unit test passes.
 - Application compilation, image rebuild and container startup pass.
-- Real XLSX processing reaches the indexing stage.
-- End-to-end acceptance is still blocked by an unresolved `DocumentVersionResponse.tags` contract mismatch between metadata and downstream indexing.
+- Real XLSX processing completes metadata registration, canonical storage, chunking, Knowledge Engine indexing and lifecycle finalization.
+- The earlier `DocumentVersionResponse.tags` error was traced to a pre-restart runtime record; current source and runtime code match.
+- No `tags` field was added to `DocumentVersionResponse` as a workaround.
 
-The response contract must be fixed from the actual metadata/indexing contract rather than by adding fields solely to suppress the current error.
+Acceptance evidence: ingestion `6e220d34-abd9-46d0-99e5-befe4c97c4b0` is `READY`; document version `v1` is `CURRENT`; Knowledge Engine search returns indexed chunks for the document.
 
 ## Data layer
 
