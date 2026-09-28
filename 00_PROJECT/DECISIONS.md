@@ -61,3 +61,11 @@
 45. Duplicate processing reconstructs the normalized document from authoritative indexed chunks instead of re-indexing the same content. Metadata and provenance are retained for the reconstructed document.
 46. `source_system` and `source_reference` are distinct concepts: `source_system` identifies the producer/integration, while `source_reference` identifies the producer-side document identity or reference.
 47. The current unit acceptance baseline for Document Ingestion is 24 passed, 0 failed. This validates the implementation foundation; Task 2 remains open until current changes receive real DGX runtime acceptance and the Open WebUI upload path is validated.
+
+
+## 2026-09-28 — Nextcloud poller E2E versioning validation
+
+48. Nextcloud polling is validated end-to-end against Document Ingestion: a changed file at the same source reference reuses the same logical document_id and creates the next document version.
+49. The validated Nextcloud flow uses ETag change detection, downloads the changed file, submits it through /v1/documents/ingest, and preserves source_system="nextcloud" plus the source path as source_reference.
+50. Version lifecycle transitions are validated on the DGX runtime: the previous version becomes SUPERSEDED, the new version becomes CURRENT, and supersedes / superseded_by relationships are persisted.
+51. Persistent Nextcloud poller state across container restart remains a separate hardening task; the current state file is ephemeral and is not yet accepted as production-durable state.
