@@ -44,8 +44,16 @@ MinIO не се разгръща на DGX Spark като production object store
 - `media_type`
 - `content_hash`
 - `source_system`
+- `source_reference` при наличие на producer-side identity/reference
 - optional access context
 - optional caller/user metadata
+
+`source_system` и `source_reference` имат различни роли:
+
+- `source_system` идентифицира системата или интеграцията, от която идва документът;
+- `source_reference` идентифицира документа в тази система.
+
+Paperless използва namespace `paperless:{document_id}` за `document_id`, а `source_system` остава `paperless`.
 
 Поддържани целеви формати:
 
@@ -57,6 +65,54 @@ MinIO не се разгръща на DGX Spark като production object store
 - TXT
 - Markdown
 - PNG / JPEG / TIFF
+
+## Production-oriented entry points
+
+### POST /v1/documents/ingest
+
+Основен multipart upload entry point. Приема файл и metadata полета и стартира единния ingestion pipeline.
+
+### POST /v1/documents/process
+
+Document-processing entry point със същия pipeline, който при успех връща `DocumentProcessResponse` с нормализирания документ.
+
+### POST /v1/integrations/paperless/webhook
+
+Контролиран Paperless boundary. Изисква configured webhook secret и приема producer-side Paperless document identity.
+
+### GET /v1/documents/{document_id}/versions
+
+Връща регистрираните версии на документ.
+
+### GET /v1/documents/{document_id}/versions/{version}
+
+Връща конкретна версия и нейния metadata/lifecycle state.
+
+### GET /v1/documents/{ingestion_id}/status
+
+Връща persistent ingestion job status.
+
+### GET /v1/documents/{ingestion_id}
+
+Връща ingestion job details.
+
+## Persistent job model
+
+Всеки ingest request получава `ingestion_id` и persistent job record в PostgreSQL.
+
+Job metadata включва:
+
+- `ingestion_id`
+- `document_id`
+- `version`
+- `status`
+- `lifecycle_status`
+- `error_code`
+- `error`
+- `created_at`
+- `updated_at`
+
+Това отделя processing state от HTTP request lifetime и позволява deterministic status reporting.
 
 ## Processing stages
 
@@ -154,6 +210,10 @@ Document
 - `created_at`
 - `updated_at`
 
+Source identity:
+
+- `source_reference`
+
 Access metadata:
 
 - `allowed_groups`
@@ -166,6 +226,11 @@ Access metadata:
 - `version`
 - `status`
 - `parent_document_id`
+- `project_id`
+- `access_scope`
+- `document_date`
+- `effective_from`
+- `effective_to`
 
 ### 7. Deduplication and versioning
 
@@ -173,11 +238,13 @@ Content hash: SHA-256.
 
 Правила:
 
-- същият hash → duplicate/no-op
+- същият hash в същия access/project scope → duplicate/no-op
 - нов hash със същия logical document → нова версия
 - старата версия остава проследима
 - reindex не променя оригиналния файл
 - deletion/deprecation се извършва чрез lifecycle state
+
+При duplicate processing документът не се индексира повторно. Когато caller поиска нормализирания документ, pipeline реконструира blocks от authoritative indexed chunks и възстановява metadata/provenance.
 
 ### 8. Chunking
 
@@ -216,7 +283,24 @@ Knowledge Engine извършва:
 - Qdrant upsert
 - retrieval index preparation
 
-### 10. Object Storage
+### 10. Repository and canonical source
+
+Document Ingestion не заобикаля Repository boundary.
+
+Преди indexing pipeline:
+
+1. регистрира document version;
+2. извършва duplicate/version checks;
+3. пази canonical source;
+4. записва `canonical_storage_key`;
+5. индексира normalized chunks;
+6. финализира lifecycle state.
+
+При успех документът достига `READY` и lifecycle `CURRENT`.
+
+При failure pipeline извършва контролирано cleanup според етапа и пази machine-readable error state.
+
+### 11. Object Storage
 
 Оригиналният файл се пази в MinIO на AI-DATA-01.
 
@@ -237,31 +321,19 @@ documents/
 
 Qdrant не е source of truth за оригиналните файлове.
 
-## API
+## API status
 
-Планиран минимален API:
+Implemented foundation:
 
-### POST /v1/documents/ingest
+- `POST /v1/documents/ingest`
+- `POST /v1/documents/process`
+- `POST /v1/integrations/paperless/webhook`
+- `GET /v1/documents/{document_id}/versions`
+- `GET /v1/documents/{document_id}/versions/{version}`
+- `GET /v1/documents/{ingestion_id}/status`
+- `GET /v1/documents/{ingestion_id}`
 
-Приема документ и стартира ingestion.
-
-### GET /v1/documents/{document_id}
-
-Връща lifecycle/status metadata.
-
-### GET /v1/documents/{document_id}/status
-
-Връща текущия processing stage и errors.
-
-### POST /v1/documents/{document_id}/reindex
-
-Стартира повторна normalization/chunking/index операция.
-
-### POST /v1/documents/{document_id}/cancel
-
-Спира pending/running ingestion job при безопасно състояние.
-
-Първата implementation версия не изисква всички endpoints.
+Future extensions remain possible for explicit reindex/cancel operations, but they are not part of the current accepted surface.
 
 ## Processing states
 
@@ -287,13 +359,13 @@ FAILED_NORMALIZATION
 FAILED_INDEXING
 ```
 
-Всеки failure трябва да има:
+Every failure should have:
 
 - stage
 - machine-readable error code
 - human-readable message
 - document_id
-- retryable flag
+- retryable flag where supported
 
 ## Security rules
 
@@ -331,6 +403,29 @@ Metrics:
 - failure rate
 - duplicate rate
 - indexing latency
+
+## Validation checkpoint — 2026-09-28
+
+Current Document Ingestion unit baseline:
+
+```
+24 passed, 0 failed, 6 warnings
+```
+
+Validated in the latest code sequence:
+
+- `source_reference` added to the document model.
+- PostgreSQL version schema and row mapping carry `source_reference`.
+- Repository `register_version()` persists `source_reference`.
+- Pipeline lookup and metadata reconstruction carry `source_reference`.
+- `/v1/documents/ingest` and `/v1/documents/process` expose the updated metadata flow.
+- Paperless webhook keeps source system/reference semantics.
+- Duplicate reconstruction test passes with `source_reference=None` fixture.
+- Full unit suite passes after the duplicate fixture correction.
+
+Warnings are non-fatal PyMuPDF deprecation warnings and pytest cache permission warnings.
+
+Current acceptance is implementation-level. Real DGX runtime acceptance of the latest changes, Open WebUI routing and complete final E2E acceptance remain pending.
 
 ## Initial implementation scope
 
