@@ -233,3 +233,26 @@ Validated examples:
 - XLSX: Paperless document ID 11 → successful conversion/webhook → `paperless:11` retrieval with TABLE provenance.
 
 Known non-blocking observation: one XLSX test produced a Paperless webhook timeout log after the Document Ingestion service had already processed the request successfully. The current Paperless webhook client uses a short 5-second timeout; asynchronous acknowledgement/timeout hardening remains a future improvement.
+
+
+## Nextcloud poller — runtime acceptance — 2026-09-28
+
+The Nextcloud lab/source integration is now validated for changed-file versioning on the DGX runtime.
+
+Validated:
+- ETag change detection for the same Nextcloud path.
+- Unchanged file is skipped when the ETag is unchanged.
+- Changed valid DOCX is downloaded and submitted to Document Ingestion.
+- source_system="nextcloud" and source_reference="Corporate AI/Incoming/проект.docx" are persisted.
+- The same logical document_id is retained after the content changes.
+- Changed content creates version 2.
+- Version 1 becomes SUPERSEDED and version 2 becomes CURRENT.
+- supersedes / superseded_by relationships are persisted.
+- Canonical storage is version-specific for each document version.
+
+Acceptance result: Nextcloud changed-file → same document_id → new version → lifecycle transition is COMPLETE.
+
+Still pending for the broader task:
+- persistent poller state across container restart;
+- Open WebUI upload → Document Ingestion routing;
+- final production E2E acceptance for all required UI and multimodal paths.
