@@ -1,6 +1,6 @@
 # CURRENT STATUS
 
-**Checkpoint:** 2026-09-24
+**Checkpoint:** 2026-09-28
 
 ## Project
 
@@ -29,6 +29,8 @@ The architecture baseline now covers Gateway, Agent/Orchestrator, Knowledge/Evid
 - End-to-end grounded RAG is validated.
 - Insufficient evidence returns a controlled no-answer response.
 - Deliberate conflicting claims are retrieved together without silently selecting a winner.
+- Knowledge Engine lifecycle filtering by `CURRENT` / `SUPERSEDED` / `ARCHIVED` is validated.
+- RAG queries requesting current content exclude archived legacy document versions.
 - CPU reranker remains an intentional architecture component because unified memory/GPU capacity is constrained.
 
 ## Document intelligence
@@ -69,6 +71,9 @@ Validated:
 - Content-hash based duplicate/version detection is implemented.
 - Duplicate lookup was corrected to use psycopg `dict_row` row mapping.
 - Duplicate-specific unit test passes: `1 passed, 23 deselected`.
+- Current Nextcloud ingestion passes a stable `source_reference` for incoming documents.
+- Gateway grounded answers preserve human-readable citations and structured source provenance.
+- Knowledge Engine RAG JSON truncation was resolved by increasing the RAG LLM `max_tokens` limit from 1024 to 8192; validated real queries finish with `stop`.
 - Application compilation passes with `compileall`.
 - Document Ingestion image rebuild succeeds.
 - PostgreSQL health check and Document Ingestion container startup succeed.
@@ -88,7 +93,24 @@ Successful real-document acceptance:
 - `document_versions` contains the canonical storage key and `tags=[]`.
 - Knowledge Engine search returns indexed chunks for the document, including `TABLE` / `table` chunks from `Traceability Matrix`.
 
-The validated XLSX path is therefore accepted for the current Document Ingestion foundation. Broader repository lifecycle semantics and format coverage remain open.
+The validated XLSX path is therefore accepted for the current Document Ingestion foundation.
+
+### Current-source RAG validation — 2026-09-28
+
+A real accounting-information-system analysis exposed a legacy document identity created by an older ingestion path without `source_reference`. The legacy `proekt.docx` record was `CURRENT` and had 20 active Qdrant chunks, while the current `проект.docx` logical source had stable `source_reference` and version history `v1 SUPERSEDED → v2 CURRENT`.
+
+Controlled cleanup:
+- PostgreSQL legacy version `1a30625b-0e91-49c9-b03b-9477d1ebe816:v1` transitioned `CURRENT → ARCHIVED`.
+- All 20 corresponding Qdrant chunks were synchronized to `ARCHIVED`.
+- The canonical source was preserved; no source file was deleted.
+- Final RAG validation with `lifecycle_status=CURRENT` returned only `проект.docx`, document `8604b9e7-fa09-4459-84f1-1353c4f57e7d`, version `2`.
+- Final result: `grounded=True`, `answer_status=FULL`.
+
+This confirms that the current accounting-project analysis path uses current source material rather than the archived legacy identity.
+
+The cleanup also exposed a Phase 2 repository gap: the current Repository abstraction has `fail_version()` for `INGESTING → ARCHIVED`, but no Repository-level archive/deprecate operation for an already `CURRENT` version with guaranteed lifecycle-to-index synchronization. The one-off cleanup was a controlled data migration and is not the intended future operational workflow.
+
+Broader repository lifecycle semantics, ACLs, delete/restore behavior and format coverage remain open.
 
 ## Platform components — architecture baseline
 
@@ -144,9 +166,10 @@ Status: IN PROGRESS
 Current technical work should continue on the accepted Knowledge/Document path, while the new platform services are implemented around it.
 
 Immediate next steps:
-1. Finish the document repository/integration decision and lifecycle contract.
-2. Complete document ingestion provenance/version/delete propagation.
-3. Integrate PDF/OCR/Vision into Document Ingestion.
+1. Validate the core document-analysis workflow with additional representative documents and questions.
+2. Validate factual and analytical/reasoning questions while enforcing groundedness and provenance.
+3. Complete document repository lifecycle integration, including Phase 2 archive/delete/restore semantics.
+4. Complete document ingestion provenance/version/delete propagation.
 5. Integrate PDF/OCR/Vision into Document Ingestion.
 6. Complete semantic evidence/conflict handling.
 7. Implement Gateway + Agent baseline.
