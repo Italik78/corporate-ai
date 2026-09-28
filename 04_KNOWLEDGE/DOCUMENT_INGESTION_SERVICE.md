@@ -40,6 +40,7 @@ MinIO не се разгръща на DGX Spark като production object store
 
 - `document_id`
 - `source_uri` или локален upload reference
+- `source_reference` — стабилен идентификатор на ресурса в изходната система, когато е наличен
 - `filename`
 - `media_type`
 - `content_hash`
@@ -175,7 +176,10 @@ Content hash: SHA-256.
 
 - същият hash → duplicate/no-op
 - нов hash със същия logical document → нова версия
+- `source_system` + `source_reference` могат да идентифицират същия logical document при външен source
+- `source_reference` е provenance идентификатор и не се използва като content hash
 - старата версия остава проследима
+- нова версия запазва връзката чрез `supersedes` / `superseded_by`
 - reindex не променя оригиналния файл
 - deletion/deprecation се извършва чрез lifecycle state
 
@@ -237,13 +241,51 @@ documents/
 
 Qdrant не е source of truth за оригиналните файлове.
 
+## Validated implementation status
+
+The Document Ingestion Service 0.3.0 has a validated runtime implementation for the core ingestion boundary.
+
+Validated:
+- PostgreSQL metadata/version registry.
+- SHA-256 duplicate detection.
+- logical document versioning and lifecycle.
+- `source_system` and `source_reference` provenance.
+- canonical original storage and persisted `canonical_storage_key`.
+- normalized handoff to Knowledge Engine.
+- duplicate normalized-document reconstruction.
+- Paperless webhook boundary.
+- TXT/Markdown/CSV/DOCX/XLSX/PPTX/PDF ingestion foundation.
+- 38 passing unit tests.
+- real DGX smoke test with `READY` and `CURRENT`.
+
+Open WebUI upload integration and Nextcloud external-source versioning remain separate acceptance items.
+
 ## API
 
 Планиран минимален API:
 
 ### POST /v1/documents/ingest
 
-Приема документ и стартира ingestion.
+Авторитетна production входна точка за документ.
+
+Приема:
+- файл;
+- optional `document_id`;
+- `source_system`;
+- optional `source_reference`;
+- version/document/effective metadata;
+- project/access/classification metadata;
+- tags.
+
+Pipeline:
+`Security → Deduplication → Metadata/Version Registration → Canonical Storage → Normalization → Knowledge Engine → Lifecycle Finalization`.
+
+При повторно подаване на същото съдържание се използва duplicate reuse. При ново съдържание за същия logical document се създава следваща версия.
+
+### POST /v1/documents/process
+
+Explicit normalized-document path. Използва същия ingestion pipeline, но връща нормализирания документ. При duplicate process заявка съществуващият нормализиран документ може да бъде реконструиран от Knowledge Engine chunks и persisted metadata.
+
 
 ### GET /v1/documents/{document_id}
 

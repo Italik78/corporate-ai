@@ -81,6 +81,24 @@ Completed:
 - [x] version/lifecycle filters in Knowledge Engine
 - [x] DGX version/lifecycle filter acceptance validation
 
+### Universal Document Entry Point — implemented
+
+The Document Ingestion Service is now the validated authoritative entry point for external and direct document ingestion.
+
+Acceptance evidence:
+- API entry point implemented.
+- Metadata/version registry implemented.
+- `source_system` and `source_reference` provenance connected.
+- SHA-256 duplicate handling validated.
+- Canonical source persistence validated.
+- Knowledge Engine indexing validated.
+- Lifecycle finalization validated.
+- Paperless webhook path preserved.
+- 38 unit tests passing.
+- Real DGX smoke test completed with `READY` / `CURRENT`.
+
+The next validation step is the external Nextcloud source: stable source identity must produce a new version of the same logical document when the source file changes, rather than creating a second document.
+
 ### Phase B — Office / Tabular Normalization
 
 Implemented:
@@ -98,6 +116,19 @@ Pending:
 - [x] Paperless-ngx webhook integration
 - [x] Tika 3.3.1 + Gotenberg Office conversion path
 - [x] TXT/DOCX/XLSX Paperless → Document Ingestion → Qdrant/Knowledge Engine validation
+- [x] authoritative `/v1/documents/ingest` production entry point
+- [x] `/v1/documents/process` normalized-document path
+- [x] source provenance via `source_system` + `source_reference`
+- [x] PostgreSQL metadata/version persistence
+- [x] SHA-256 duplicate detection and duplicate reuse
+- [x] canonical original storage + persisted storage key
+- [x] Knowledge Engine indexing as ingestion acceptance step
+- [x] lifecycle/version handling and supersession foundation
+- [x] duplicate normalized-document reconstruction from indexed chunks
+- [x] real DGX smoke-test acceptance
+- [x] Document Ingestion unit suite: 38 passing tests
+- [ ] validate Nextcloud source-reference version update end-to-end
+- [ ] validate persistent Nextcloud poller state across restart
 - [ ] validate Open WebUI upload integration with Document Ingestion
 - [ ] validate production retrieval path without Open WebUI independent file-* vector collections
 

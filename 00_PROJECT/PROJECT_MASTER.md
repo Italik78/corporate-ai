@@ -29,6 +29,23 @@ Qwen3.6-35B-A3B-NVFP4 чрез vLLM.
 
 ## Основни подсистеми
 
+## Current implementation milestone — Universal Document Ingestion
+
+Document Ingestion Service 0.3.0 is now the validated authoritative production entry point for corporate documents.
+
+Validated capabilities:
+- metadata/version registration;
+- `source_system` and `source_reference` provenance;
+- SHA-256 duplicate detection and reuse;
+- logical document versioning and lifecycle handling;
+- canonical original storage;
+- Knowledge Engine indexing;
+- Paperless webhook boundary;
+- 38 passing Document Ingestion unit tests;
+- real DGX Spark smoke test with `READY` / `CURRENT`, indexed content and persisted canonical storage.
+
+Next integration milestones are Nextcloud source-reference versioning validation and Open WebUI upload integration.
+
 Document & Knowledge Architecture v1 is the architectural baseline for large-document handling, normalized document structure, provenance, versioning, scoped retrieval and Agent document analysis. Original files are separate from the vector index.
 LLM, embeddings, Qdrant, reranker, universal document ingestion, PDF/Vision, RAG, knowledge graph, agent/tool gateway, Office tools, Open WebUI, Caddy, Corporate AI Console, monitoring, backup/recovery и evaluation.
 

@@ -52,3 +52,23 @@
 35. Large-document understanding must support both retrieval-first questions and planned/agentic whole-document analysis. Full Context is a bounded capability, not the default strategy for arbitrary large documents.
 36. Document understanding is a first-class capability: preserve document structure, tables, pages, sections, versions, relationships and provenance instead of reducing documents to anonymous text chunks.
 37. The implementation process is command-by-command on the DGX with real runtime validation. Each milestone is marked complete only after technical acceptance.
+
+## 2026-09-28 — Universal Document Ingestion / Production Entry Point
+
+42. Document Ingestion Service 0.3.0 is the authoritative production entry point for document ingestion. The primary API is `/v1/documents/ingest`; `/v1/documents/process` is the explicit normalized-document return path.
+
+43. Document ingestion must preserve `source_system` and optional `source_reference` from the entry point through PostgreSQL document-version metadata and reconstructed document responses. Source provenance must not be inferred later from filename or content.
+
+44. Duplicate detection is performed using SHA-256 content hash together with the applicable access/project scope. A duplicate request must not create a new document version. When document content is requested through the process path, the existing normalized document is reconstructed from indexed chunks and persisted metadata.
+
+45. The ingestion pipeline must register the document version before canonical source storage and Knowledge Engine indexing, then finalize the lifecycle state only after successful indexing.
+
+46. Canonical original storage is part of the ingestion critical path. The original file is stored outside Qdrant and the resulting `canonical_storage_key` is persisted in document-version metadata.
+
+47. Document Ingestion exposes a dedicated Paperless webhook boundary. Paperless-origin documents use `source_system="paperless"` and a stable `document_id` namespace derived from the Paperless document ID.
+
+48. Metadata fields including tags, source reference, document dates, effective dates, project ID, access scope, classification and lifecycle state must survive the complete ingestion path and remain available to downstream retrieval and document reconstruction.
+
+49. The Document Ingestion unit suite and real DGX smoke test are acceptance evidence for the implemented ingestion path. The current validated unit suite contains 38 passing tests. Open WebUI upload integration remains a separate pending acceptance item.
+
+50. A successful ingestion is not considered complete merely because extraction succeeds. Technical acceptance requires metadata registration, canonical source persistence, Knowledge Engine indexing and final `CURRENT` lifecycle state.

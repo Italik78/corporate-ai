@@ -94,6 +94,50 @@ The Open WebUI target is broader than upload integration. We will use its capabi
 
 These UI capabilities must remain backed by Corporate AI authoritative services where business/security/provenance matters.
 
+## Universal Document Ingestion / Production Entry Point — implemented
+
+The Document Ingestion Service now provides the validated production entry point for corporate documents.
+
+Implemented and validated:
+- `/v1/documents/ingest` as the authoritative document entry point.
+- `/v1/documents/process` for explicit normalized-document processing/return.
+- `source_system` propagation through the ingestion pipeline.
+- `source_reference` propagation through the ingestion metadata path.
+- PostgreSQL document-version registry with persistent provenance.
+- SHA-256 duplicate detection and duplicate reuse.
+- Stable logical document identity support for externally sourced documents.
+- Automatic version progression for an existing logical document when new content is submitted.
+- Lifecycle handling through INGESTING → CURRENT / SUPERSEDED.
+- Canonical source storage with persisted `canonical_storage_key`.
+- Knowledge Engine indexing as part of the ingestion critical path.
+- Document reconstruction from existing Knowledge Engine chunks for duplicate process requests.
+- Paperless webhook boundary with stable `paperless:{document_id}` document identity.
+- Metadata propagation for classification, access scope, tags, dates and project information.
+- Real DGX smoke test completed successfully with `READY`, `CURRENT`, one indexed chunk and persisted canonical storage.
+- Document Ingestion unit suite currently passes **38 tests**.
+
+Validated runtime smoke-test result:
+- service: `document-ingestion`
+- version: `0.3.0`
+- health: `ok`
+- metadata database: available
+- Knowledge Engine: available
+- test document: `smoke-test-001`
+- version: `1`
+- lifecycle: `CURRENT`
+- status: `READY`
+- indexed chunks: `1`
+- canonical storage key: `documents/smoke-test-001/original/1/corporate-ai-smoke.txt`
+
+This establishes Document Ingestion as a real validated entry point rather than only an architectural or unit-test foundation.
+
+Still pending:
+- Nextcloud polling/source-reference end-to-end version update validation.
+- Persistent poller state across container restart.
+- Open WebUI upload → Document Ingestion integration.
+- Production retrieval path validation without independent Open WebUI `file-*` vector collections.
+- Full PDF/OCR/Vision integration acceptance.
+
 ## Current phase
 
 ### PHASE 3: Knowledge / Grounded Reasoning + Corporate Information System foundation
