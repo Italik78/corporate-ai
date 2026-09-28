@@ -38,22 +38,29 @@ Completed:
 - real XLSX processing reaches version/indexing and creates ingestion/document version records.
 - real XLSX end-to-end acceptance completed: ingestion `6e220d34-abd9-46d0-99e5-befe4c97c4b0` is `READY`, document version `v1` is `CURRENT`, canonical storage is populated, and Knowledge Engine search returns indexed chunks from the document.
 - the earlier `DocumentVersionResponse.tags` error was confirmed as belonging to a pre-restart runtime record; no schema workaround was introduced.
+- stable Nextcloud `source_reference` is passed into Document Ingestion for current incoming files.
+- Knowledge Engine RAG JSON truncation was resolved by increasing the RAG LLM `max_tokens` limit from 1024 to 8192.
+- Gateway grounded answers were validated with human-readable citations and structured source provenance.
+- lifecycle filtering by `CURRENT` was validated against real document versions.
+- legacy document identity cleanup was validated: the old `proekt.docx` record and its 20 Qdrant chunks were moved from `CURRENT` to `ARCHIVED`, while the canonical source was preserved.
+- final accounting-project RAG validation with `lifecycle_status=CURRENT` returned only the current `проект.docx` v2 source and produced `grounded=True`, `answer_status=FULL`.
 
 Current status:
 - Universal file ingestion foundation is accepted for the validated XLSX path.
-- Remaining work is repository lifecycle integration, broader format coverage and downstream provenance/delete propagation.
+- Current document-questioning/RAG path is accepted for further representative-document testing.
+- Current-source filtering is verified after cleanup of the known legacy document identity.
+- Repository archive/delete/restore semantics remain a Phase 2 gap; the legacy cleanup was a one-off controlled migration, not a new operational API.
 
 Next:
-1. Finish document repository lifecycle integration.
-2. Complete provenance/version/delete propagation.
-3. Integrate PDF/OCR/Vision into Document Ingestion.
-4. Conditional reranking/evidence fusion.
-3. Finish document repository lifecycle integration.
+1. Validate document analysis with additional representative documents and questions.
+2. Validate analytical/reasoning questions while enforcing groundedness and provenance.
+3. Complete repository lifecycle integration and Phase 2 archive/delete/restore semantics.
 4. Complete provenance/version/delete propagation.
-5. Conditional reranking/evidence fusion.
-6. Improve semantic conflict detection.
-7. Validate ACL filtering before context construction.
-8. Evaluate knowledge graph where it provides measurable value.
+5. Integrate PDF/OCR/Vision into Document Ingestion.
+6. Conditional reranking/evidence fusion.
+7. Improve semantic conflict detection.
+8. Validate ACL filtering before context construction.
+9. Evaluate knowledge graph where it provides measurable value.
 
 ## Phase 4 — Multimodal Document Intelligence
 
