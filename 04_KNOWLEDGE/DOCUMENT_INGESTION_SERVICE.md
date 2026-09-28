@@ -492,3 +492,23 @@ Expected:
 10. source/provenance is preserved
 
 The test is not DONE until the full flow is executed on the DGX runtime.
+
+
+## Nextcloud E2E versioning acceptance — 2026-09-28
+
+Validated on the DGX runtime through the Nextcloud poller and the Document Ingestion entry point.
+
+Tested flow:
+1. Poller lists Corporate AI/Incoming/ through WebDAV and tracks the file ETag.
+2. An unchanged file is skipped when the ETag is unchanged.
+3. After the file content changes, a new ETag is detected and the file is downloaded.
+4. The changed valid DOCX is submitted to POST /v1/documents/ingest and reaches READY.
+5. The same source_reference, Corporate AI/Incoming/проект.docx, resolves the existing logical document.
+6. The existing document_id is retained and the changed content creates version 2.
+7. Version 1 is persisted as SUPERSEDED and version 2 as CURRENT.
+8. supersedes and superseded_by relationships are persisted.
+9. Canonical storage keys are version-specific.
+
+This validates the changed-file → stable logical document → automatic version progression → lifecycle transition path.
+
+Persistent poller state across container restart remains a separate hardening task.
