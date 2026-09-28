@@ -63,3 +63,13 @@
 - Document Ingestion duplicate lookup correction validated by targeted unit test.
 - Document Ingestion application compilation, image rebuild and container startup validated.
 - Real XLSX ingestion acceptance completed successfully after rebuilding/restarting the current Document Ingestion runtime: ingestion `6e220d34-abd9-46d0-99e5-befe4c97c4b0` reached `READY`, document version `v1` is `CURRENT`, canonical storage is populated, and Knowledge Engine retrieval returns indexed chunks.
+
+
+## 2026-09-28 — Current-source RAG validation
+
+40. Gateway RAG generation must remain grounded in retrieved document evidence and preserve both human-readable citations and structured source provenance.
+41. Knowledge Engine RAG generation must not be artificially truncated by an insufficient `max_tokens` limit; the validated RAG path now uses `max_tokens=8192` and real queries complete with `finish_reason=stop`.
+42. Default/current-state retrieval must use lifecycle filtering so archived or superseded versions do not participate when current content is requested.
+43. A legacy document identity created before stable `source_reference` support was treated as a data-migration issue, not as a retrieval-engine bug. Its PostgreSQL version and all 20 Qdrant chunks were transitioned to `ARCHIVED`; the canonical source was preserved.
+44. Final validation of the accounting-project analysis path returned only the current `проект.docx` v2 source, with `grounded=True` and `answer_status=FULL`.
+45. The current Repository abstraction does not yet expose an operational archive/deprecate method for already-CURRENT versions with guaranteed Knowledge Engine lifecycle synchronization. This remains a Phase 2 repository lifecycle gap; the 2026-09-28 legacy cleanup was a controlled one-off migration.
