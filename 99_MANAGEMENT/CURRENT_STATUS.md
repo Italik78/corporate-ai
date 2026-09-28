@@ -1,6 +1,6 @@
 # CURRENT STATUS
 
-**Checkpoint:** 2026-09-21
+**Checkpoint:** 2026-09-28
 
 ## Project
 
@@ -67,6 +67,55 @@ Architecture:
 - Original documents remain in Object Storage; Qdrant is an index, not the source of truth.
 - Large-document work is retrieval-first for ordinary questions and planned/bounded for whole-document analysis.
 
+## Document Ingestion — current implementation checkpoint
+
+The Document Ingestion Service now provides the production-oriented intake foundation required for Task 2.
+
+Implemented:
+- `POST /v1/documents/ingest` multipart upload entry point.
+- `POST /v1/documents/process` entry point returning the normalized document.
+- `POST /v1/integrations/paperless/webhook` controlled Paperless boundary with secret validation.
+- Persistent `ingestion_jobs` status records in PostgreSQL.
+- Bounded upload staging with filename/extension/size validation and SHA-256 hashing.
+- Repository registration before indexing.
+- Canonical source storage and canonical storage key persistence.
+- Versioning, SHA-256 deduplication, lifecycle and supersession handling.
+- Project and access-scope metadata.
+- `source_reference` as a first-class metadata field across models, PostgreSQL version records, pipeline paths and duplicate reconstruction.
+- Paperless source namespace `paperless:{document_id}`.
+- Duplicate reconstruction from authoritative indexed chunks, preserving source metadata and provenance.
+- Normalized extraction tests for TXT, Markdown, CSV, DOCX, XLSX, PPTX and native PDF text.
+
+### Latest test checkpoint
+
+`services/document-ingestion/tests/test_unit.py`
+
+**24 passed, 0 failed, 6 warnings**
+
+The warnings are non-fatal PyMuPDF deprecation warnings and pytest cache permission warnings.
+
+### Source-reference change sequence validated by compilation
+
+- `models.py` source-reference update → compile OK.
+- `metadata.py` schema/source-reference updates → compile OK.
+- `metadata.py` row mapping update → compile OK.
+- `metadata.py` `register_version` source-reference persistence → compile OK.
+- `pipeline.py` source-reference lookup and metadata propagation → compile OK.
+- `main.py` `/v1/documents/ingest` and `/v1/documents/process` source-reference-related updates → compile OK.
+- Paperless webhook source-reference integration → compile OK.
+- Duplicate reconstruction fixture updated with `source_reference=None`; focused test passed and the full unit suite then passed.
+
+### Current acceptance state
+
+Task 2 is **implementation foundation complete but not closed**.
+
+Still pending:
+1. Real DGX runtime validation of the current source-reference changes.
+2. Open WebUI upload → Document Ingestion routing.
+3. Validation that Open WebUI does not create independent `file-*` production collections.
+4. Complete end-to-end acceptance through PostgreSQL → canonical storage → Knowledge Engine/Qdrant.
+5. PDF OCR/Vision integration for scanned and complex pages.
+
 ## Open WebUI discovery checkpoint
 
 The Open WebUI container is already attached to `ai-net`:
@@ -115,23 +164,29 @@ Completed:
 - PDF native extraction with PyMuPDF 1.26.4, including page/block/bbox provenance.
 - Paperless-ngx integration with Tika 3.3.1 and Gotenberg validated.
 - Paperless → Document Ingestion → Knowledge Engine/Qdrant E2E validated for TXT, DOCX and XLSX.
+- Persistent ingestion job/status foundation.
+- Production-oriented `/v1/documents/ingest` and `/v1/documents/process` entry points.
+- `source_reference` metadata foundation and persistence.
+- Duplicate reconstruction from indexed chunks.
+- Full document-ingestion unit baseline: 24 passed, 0 failed.
 - Open WebUI architecture and Web Search baseline.
 - Open WebUI confirmed on `ai-net`.
 
 ## Immediate execution order
 
-1. **C1.1 — Inspect installed Open WebUI capabilities/version.**
-2. **C1.2 — Validate Corporate Knowledge retrieval path without mismatched embeddings.**
-3. **C1.3 — Validate Open WebUI Knowledge / Folder / System Prompt behavior.**
-4. **C1.4 — Validate Filter/file_handler and OpenAPI/MCP extension points.**
-5. **C2.1 — Implement controlled Open WebUI upload → Document Ingestion path.**
-6. **C2.2 — Validate XLSX/DOCX/PPTX/CSV through the UI.**
-7. **C2.3 — Integrate PDF/OCR/Vision.**
-8. **C3 — Build authoritative Corporate Knowledge workspace integration.**
-9. **C4 — Add document analysis and artifact tools.**
-10. **C5 — Add controlled Web Search.**
-11. **C6 — Integrate Agent workflows.**
-12. **C7 — Execute complete DGX acceptance suite.**
+1. **C2.1 / Task 2 acceptance — validate current ingestion changes on the DGX runtime.**
+2. **C1.1 — Inspect installed Open WebUI capabilities/version.**
+3. **C1.2 — Validate Corporate Knowledge retrieval path without mismatched embeddings.**
+4. **C1.3 — Validate Open WebUI Knowledge / Folder / System Prompt behavior.**
+5. **C1.4 — Validate Filter/file_handler and OpenAPI/MCP extension points.**
+6. **C2.1 — Implement controlled Open WebUI upload → Document Ingestion path.**
+7. **C2.2 — Validate XLSX/DOCX/PPTX/CSV through the UI.**
+8. **C2.3 — Integrate PDF/OCR/Vision.**
+9. **C3 — Build authoritative Corporate Knowledge workspace integration.**
+10. **C4 — Add document analysis and artifact tools.**
+11. **C5 — Add controlled Web Search.**
+12. **C6 — Integrate Agent workflows.**
+13. **C7 — Execute complete DGX acceptance suite.**
 
 ## Execution discipline
 
