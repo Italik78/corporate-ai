@@ -261,3 +261,19 @@ Focus:
 - resource contention tests.
 - security hardening.
 - deployment reproducibility.
+
+
+## Universal Document Ingestion — Nextcloud acceptance — 2026-09-28
+
+- [x] Nextcloud ETag change detection
+- [x] Changed file submitted to Document Ingestion
+- [x] Stable source_reference for the Nextcloud path
+- [x] Same logical document_id reused for changed content
+- [x] New version created automatically
+- [x] Previous version transitions to SUPERSEDED
+- [x] New version transitions to CURRENT
+- [x] supersedes / superseded_by relationships persisted
+- [x] Version-specific canonical storage validated
+- [ ] Persistent poller state across container restart
+
+The Nextcloud changed-file → stable logical document → automatic version progression path is accepted on the DGX runtime.
