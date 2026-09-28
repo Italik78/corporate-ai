@@ -37,3 +37,10 @@ LLM, embeddings, Qdrant, reranker, universal document ingestion, PDF/Vision, RAG
 
 ## Source of truth
 GitHub repository Italik78/corporate-ai е source of truth за архитектурата, конфигурацията, кода и документацията.
+
+
+## Current implementation milestone — Universal Document Ingestion — 2026-09-28
+
+Document Ingestion Service 0.3.0 is the validated authoritative document entry point for the implemented ingestion paths. The DGX runtime now validates Nextcloud changed-file detection and versioning: the same source_reference resolves the same logical document_id, changed content creates the next version, and lifecycle transitions are persisted as SUPERSEDED → CURRENT. Canonical storage is version-specific and provenance is retained.
+
+Pending: persistent Nextcloud poller state across container restart and Open WebUI upload integration.
