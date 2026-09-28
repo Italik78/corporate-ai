@@ -44,6 +44,7 @@ MinIO не се разгръща на DGX Spark като production object store
 - `media_type`
 - `content_hash`
 - `source_system`
+- optional `source_reference`
 - optional access context
 - optional caller/user metadata
 
@@ -154,6 +155,8 @@ Document
 - `created_at`
 - `updated_at`
 
+`source_reference` е стабилен идентификатор на logical source object в upstream repository/system. Текущият Nextcloud poller използва пътя в Incoming зоната, например `Corporate AI/Incoming/{filename}`. Това позволява повторните доставки на един и същ logical document да се свържат към съществуващия `document_id` и да се създават версии вместо нови независими document identities.
+
 Access metadata:
 
 - `allowed_groups`
@@ -166,6 +169,7 @@ Access metadata:
 - `version`
 - `status`
 - `parent_document_id`
+- `source_reference`
 
 ### 7. Deduplication and versioning
 
@@ -178,6 +182,9 @@ Content hash: SHA-256.
 - старата версия остава проследима
 - reindex не променя оригиналния файл
 - deletion/deprecation се извършва чрез lifecycle state
+- default/current retrieval трябва да изключва `SUPERSEDED` и `ARCHIVED` съдържание
+
+`source_reference` трябва да се използва за идентичност на logical source object, когато upstream системата предоставя стабилен reference. Липсващ `source_reference` при legacy записи не трябва автоматично да се приема като доказателство, че документът е нов logical document.
 
 ### 8. Chunking
 
@@ -209,6 +216,7 @@ Knowledge Engine получава само нормализирани chunks.
 - confidence
 - content
 - provenance metadata
+- lifecycle status
 
 Knowledge Engine извършва:
 
@@ -397,3 +405,20 @@ Expected:
 10. source/provenance is preserved
 
 The test is not DONE until the full flow is executed on the DGX runtime.
+
+
+## Validation checkpoint — 2026-09-28
+
+The current document-questioning path is validated on the DGX runtime:
+
+- PostgreSQL metadata and canonical storage are authoritative for the ingested document.
+- Knowledge Engine indexes normalized chunks in Qdrant.
+- Gateway produces grounded answers with human-readable citations and structured source provenance.
+- RAG generation completes without the previous JSON truncation failure.
+- lifecycle filtering excludes `SUPERSEDED` and `ARCHIVED` versions from current-state retrieval.
+- a legacy document identity with 20 Qdrant chunks was archived in PostgreSQL and synchronized to Qdrant without deleting its canonical source.
+- a final accounting-project query with `lifecycle_status=CURRENT` returned only the current `проект.docx` v2 source and produced `grounded=True`, `answer_status=FULL`.
+
+The next validation step is to add representative documents, ask factual and analytical questions, and verify that answers remain grounded in the supplied evidence before advancing to the next implementation task.
+
+The operational Repository archive/delete/restore semantics remain a Phase 2 gap. The 2026-09-28 legacy cleanup was a controlled migration and is not the future operational API.
