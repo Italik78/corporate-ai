@@ -14,6 +14,18 @@ Knowledge layer: Qwen3-Embedding-4B, Qdrant, Qwen3-Reranker-0.6B, hybrid retriev
 
 Document intelligence: PDF, DOCX, DOC, XLSX, PPTX, CSV, TXT и изображения. Universal ingestion → format router → specialized extraction → structure → chunking → metadata → embedding → Qdrant/Graph.
 
+Document Ingestion current checkpoint 2026-09-28:
+- production-oriented `/v1/documents/ingest` and `/v1/documents/process` entry points;
+- persistent PostgreSQL ingestion jobs/status;
+- Repository registration before indexing and canonical source storage;
+- versioning, lifecycle, SHA-256 deduplication, project/access metadata;
+- `source_reference` persisted across model, metadata, pipeline and Paperless paths;
+- Paperless source namespace `paperless:{document_id}`;
+- duplicate reconstruction from authoritative indexed chunks;
+- unit suite: 24 passed, 0 failed, 6 non-fatal warnings.
+
+Task 2 — Universal Document Ingestion is implementation foundation complete but not closed. Remaining acceptance work is real DGX validation of the latest changes, Open WebUI upload routing, prevention of independent Open WebUI `file-*` production collections, final E2E acceptance and PDF OCR/Vision integration.
+
 Tools: Word, Excel, PowerPoint, PDF, file operations и вътрешни AI tools. Tool Gateway има schema, policy, validation, logging, traceability и confirmation при рискови действия.
 
 Corporate AI Console показва application services, status, version, image, port, network, health, ресурси, зависимости и връзки. Новите services трябва да се откриват автоматично.
