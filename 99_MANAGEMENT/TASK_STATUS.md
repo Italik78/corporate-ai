@@ -1,6 +1,6 @@
 # Corporate AI — Task Status
 
-**Updated:** 2026-09-23
+**Updated:** 2026-09-28
 
 ## Task 1 — Repository + Lifecycle Contract
 
@@ -29,26 +29,38 @@ The Repository Contract v0.1 deliberately does not select or deploy Mayan/MinIO 
 
 ## Task 2 — Universal Document Ingestion
 
-**Status: NEXT / IN PROGRESS**
+**Status: IMPLEMENTATION FOUNDATION COMPLETE / RUNTIME ACCEPTANCE PENDING**
 
-The ingestion foundation exists, but the project does not yet have the final user-facing document entry point.
+The production-oriented Document Ingestion entry points and orchestration foundation are implemented. Full Task 2 acceptance is not yet closed because Open WebUI routing and complete DGX acceptance still remain.
 
-Current validated technical entry point:
-- POST /v1/documents/ingest on Document Ingestion.
+Implemented and validated in code/tests:
+- POST /v1/documents/ingest as the primary multipart document entry point.
+- POST /v1/documents/process as a document-processing entry point returning the normalized document.
+- POST /v1/integrations/paperless/webhook as the controlled Paperless boundary.
+- Persistent ingestion job metadata in PostgreSQL with status, lifecycle, version and error fields.
+- Bounded upload staging with SHA-256 hashing and extension/size validation.
+- Repository registration before Knowledge Engine indexing.
+- Canonical source storage and canonical storage key persistence.
+- Normalized extraction for TXT, Markdown, CSV, DOCX, XLSX, PPTX and native PDF text.
+- Versioning, SHA-256 deduplication, lifecycle and supersession handling.
+- Project and access-scope metadata propagation.
+- `source_reference` support in document metadata, PostgreSQL version records and ingestion paths.
+- Paperless source namespace `paperless:{document_id}`.
+- Duplicate reconstruction from the authoritative indexed chunks with metadata/provenance preserved.
+- Controlled duplicate behavior without re-indexing the same content.
+- Unit regression suite: 24 passed, 0 failed.
+- Source-reference compile checks: models, metadata and pipeline compile successfully.
 
-This is currently a service-level API used for runtime validation, not yet the complete Corporate AI document intake boundary.
+Latest validation checkpoint:
+- `services/document-ingestion/tests/test_unit.py`: 24 passed, 0 failed, 6 warnings.
+- The remaining warnings are PyMuPDF deprecation warnings and pytest cache permission warnings. They do not fail the suite.
 
-Task 2 must therefore establish the production document entry point and route it through:
-1. request validation/security intake;
-2. Repository document registration and canonical storage;
-3. extraction/OCR/Vision by document type;
-4. normalization and chunking;
-5. Knowledge Engine indexing;
-6. lifecycle/provenance synchronization;
-7. deterministic job/status reporting;
-8. controlled failure and cleanup semantics.
-
-The entry point must support the target document intake architecture without bypassing the Repository boundary.
+Remaining for Task 2 acceptance:
+1. Real DGX runtime validation of the current source-reference changes.
+2. Open WebUI upload → Document Ingestion routing.
+3. Validation that Open WebUI does not create independent `file-*` production collections.
+4. Complete end-to-end acceptance including PostgreSQL → canonical storage → Knowledge Engine/Qdrant.
+5. PDF OCR/Vision integration for scanned/complex pages.
 
 ## Completion rule
 
