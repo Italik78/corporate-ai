@@ -36,13 +36,6 @@
 29. A self-hosted SearXNG deployment is the first candidate for controlled web search; a hosted search provider remains an alternative if quality/reliability requires it.
 30. Documentation and plans are not implementation: Open WebUI integration and Web Search become complete only after DGX runtime validation.
 
-## 2026-09-21 — Validated Document Ingestion / Paperless path
-
-38. Document Ingestion Service 0.3.0 is the normalized ingestion boundary for TXT, Markdown, CSV, DOCX, XLSX, PPTX and PDF.
-39. Paperless-ngx integrates through the dedicated webhook boundary; Tika 3.3.1 and Gotenberg are the validated extraction/conversion components.
-40. Real Paperless → Document Ingestion → Qdrant/Knowledge Engine flows are validated for TXT, DOCX and XLSX, with provenance preserved.
-41. A Paperless webhook timeout was observed after successful XLSX processing; this is tracked as a non-blocking timeout/acknowledgement hardening item.
-
 ## 2026-09-20 — Corporate Information System direction
 
 31. The product target is a **Corporate Information System**. Open WebUI is the primary user workspace, not merely a chat frontend.
@@ -52,3 +45,19 @@
 35. Large-document understanding must support both retrieval-first questions and planned/agentic whole-document analysis. Full Context is a bounded capability, not the default strategy for arbitrary large documents.
 36. Document understanding is a first-class capability: preserve document structure, tables, pages, sections, versions, relationships and provenance instead of reducing documents to anonymous text chunks.
 37. The implementation process is command-by-command on the DGX with real runtime validation. Each milestone is marked complete only after technical acceptance.
+
+## 2026-09-21 — Validated Document Ingestion / Paperless path
+
+38. Document Ingestion Service 0.3.0 is the normalized ingestion boundary for TXT, Markdown, CSV, DOCX, XLSX, PPTX and PDF.
+39. Paperless-ngx integrates through the dedicated webhook boundary; Tika 3.3.1 and Gotenberg are the validated extraction/conversion components.
+40. Real Paperless → Document Ingestion → Qdrant/Knowledge Engine flows are validated for TXT, DOCX and XLSX, with provenance preserved.
+41. A Paperless webhook timeout was observed after successful XLSX processing; this is tracked as a non-blocking timeout/acknowledgement hardening item.
+
+## 2026-09-28 — Universal Document Ingestion implementation foundation
+
+42. Document Ingestion exposes `/v1/documents/ingest` as the primary multipart document entry point and `/v1/documents/process` for callers that require the normalized document response. Both route through the same ingestion pipeline and Repository boundary.
+43. Persistent ingestion jobs in PostgreSQL are part of the document intake contract. Job state carries ingestion ID, document ID, version, processing status, lifecycle status and machine-readable failure information.
+44. `source_reference` is a first-class document metadata field. It is persisted with document versions and propagated through upload, process, Paperless and duplicate reconstruction paths. Paperless uses the source namespace `paperless:{document_id}`.
+45. Duplicate processing reconstructs the normalized document from authoritative indexed chunks instead of re-indexing the same content. Metadata and provenance are retained for the reconstructed document.
+46. `source_system` and `source_reference` are distinct concepts: `source_system` identifies the producer/integration, while `source_reference` identifies the producer-side document identity or reference.
+47. The current unit acceptance baseline for Document Ingestion is 24 passed, 0 failed. This validates the implementation foundation; Task 2 remains open until current changes receive real DGX runtime acceptance and the Open WebUI upload path is validated.
