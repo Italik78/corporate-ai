@@ -80,6 +80,7 @@ Completed:
 - [x] metadata propagation to Qdrant
 - [x] version/lifecycle filters in Knowledge Engine
 - [x] DGX version/lifecycle filter acceptance validation
+- [x] `source_reference` metadata foundation and persistence
 
 ### Phase B — Office / Tabular Normalization
 
@@ -92,14 +93,23 @@ Implemented:
 - [x] pipeline routing to format-specific extractors
 - [x] Knowledge Engine handoff through normalized chunks
 
-Pending:
+Pending / current:
 - [x] DGX build and end-to-end ingestion/RAG validation
 - [x] PDF native extraction with page/block/bbox provenance
 - [x] Paperless-ngx webhook integration
 - [x] Tika 3.3.1 + Gotenberg Office conversion path
 - [x] TXT/DOCX/XLSX Paperless → Document Ingestion → Qdrant/Knowledge Engine validation
+- [x] Document Ingestion production-oriented entry points and persistent job/status foundation
+- [x] bounded upload staging and SHA-256 hashing
+- [x] Repository registration before indexing
+- [x] canonical source storage and storage-key persistence
+- [x] versioning, lifecycle, supersession and access-scope metadata flow
+- [x] duplicate reconstruction from authoritative indexed chunks
+- [x] unit regression baseline: 24 passed, 0 failed
+- [ ] validate current source-reference changes on the DGX runtime
 - [ ] validate Open WebUI upload integration with Document Ingestion
 - [ ] validate production retrieval path without Open WebUI independent file-* vector collections
+- [ ] integrate PDF OCR/Vision for scanned and complex pages
 
 ### Phase C — Open WebUI Integration & Web Search
 
@@ -123,13 +133,14 @@ Baseline:
 #### C2 — Corporate document upload and document intelligence
 - [ ] preserve Open WebUI upload UX
 - [ ] route uploads into Document Ingestion
-- [ ] register metadata/version before indexing
-- [ ] preserve original files outside Qdrant
-- [ ] validate DOCX/XLSX/PPTX/CSV end-to-end
+- [x] register metadata/version before indexing
+- [x] preserve original files outside Qdrant through the Repository/canonical storage boundary
+- [x] validate DOCX/XLSX/PPTX/CSV extraction and normalization at unit level
+- [ ] validate DOCX/XLSX/PPTX/CSV end-to-end through the UI
 - [ ] integrate PDF/OCR/Vision
-- [ ] preserve page/section/table/slide provenance
+- [x] preserve page/section/table/slide provenance in normalized blocks/chunks
 - [ ] expose document inspection and analysis operations
-- [ ] validate current/superseded version behavior
+- [ ] validate current/superseded version behavior through the final UI path
 
 #### C3 — Corporate Knowledge and Workspace layer
 - [ ] expose Corporate Knowledge through Knowledge Engine or validated external Qdrant integration
