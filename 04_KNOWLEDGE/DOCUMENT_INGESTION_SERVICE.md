@@ -512,3 +512,32 @@ Tested flow:
 This validates the changed-file → stable logical document → automatic version progression → lifecycle transition path.
 
 Persistent poller state across container restart remains a separate hardening task.
+
+
+## Runtime stabilization checkpoint — 2026-09-30
+
+### Multipart staging
+
+The service uses a 512 MB /tmp tmpfs in its deployment. This is required for bounded multipart upload staging and avoids the previous 64 MB tmpfs failure boundary. Canonical sources remain outside the container staging area.
+
+### PDF page count
+
+IngestResponse exposes page_count for successful PDF processing alongside chunk_count and indexed_count. The field is intended for immediate caller/UI synchronization; the current PostgreSQL document_versions schema does not persist page/chunk/index counters as authoritative version fields.
+
+### Vision structured output
+
+PDF Vision requests use:
+- response_format: {"type": "json_object"}
+- max_tokens: 4096
+
+This was added after nondeterministic PDF_VISION_INVALID_JSON failures on scanned pages. A direct component validation against an 87-page scanned PDF produced valid structured results for all 87 pages. The real /v1/documents/process E2E remains the acceptance gate before declaring scanned-PDF Vision integration complete.
+
+### E2E acceptance in progress
+
+The active acceptance test submits a metadata-modified copy of A202401001-000-00_ Двустранно_подписан_договор (2).pdf through /v1/documents/process with a new SHA-256, specifically to prevent the normal content-hash deduplication branch from bypassing Vision.
+
+Expected acceptance path:
+
+multipart upload → security → PDF routing → 87-page Vision → normalization → chunking → Knowledge Engine → embedding → Qdrant → READY/CURRENT
+
+Do not use /v1/documents/status; the valid job-status endpoint requires the actual ingestion ID: /v1/documents/{ingestion_id}/status. The current HTTP request must be allowed to finish before evaluating the result.
