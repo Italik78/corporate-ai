@@ -256,3 +256,32 @@ Still pending for the broader task:
 - persistent poller state across container restart;
 - Open WebUI upload → Document Ingestion routing;
 - final production E2E acceptance for all required UI and multimodal paths.
+ 
+
+## 2026-09-30 — DGX restart, Vision stabilization and Nextcloud UI checkpoint
+
+After the DGX restart/update the active stack was revalidated. The critical services are healthy: Document Ingestion 0.3.0 on :8095, Knowledge Engine 0.3.1-test on :8093, Gateway 0.3.3 on :8096, Qwen3.6, Qdrant, PostgreSQL and Nextcloud poller. The local Qwen3-Embedding-4B service was restarted after reboot and Knowledge Engine/Gateway health returned to fully OK.
+
+### Document Ingestion fixes validated
+
+- .xls ingestion is implemented and validated end-to-end through Nextcloud poller → Document Ingestion → Qdrant → Knowledge Engine.
+- Multipart upload staging was hardened by increasing the Document Ingestion /tmp tmpfs to 512 MB; the previous 64 MB limit caused large multipart failures. A real 1.5 MB PDF subsequently reached application-level EMPTY_DOCUMENT, proving the transport limit was removed.
+- IngestResponse now exposes page_count; successful PDF ingestion returns page count together with chunk/index counts.
+- PDF Vision calls now request structured JSON with response_format={"type":"json_object"} and max_tokens=4096. A direct 87-page scanned-PDF Vision validation returned 87/87 successful pages with no PDF_VISION_INVALID_JSON failures. This closes the previously observed nondeterministic Vision JSON parsing defect at component-test level.
+- The failed duplicate of A202401001-000-00_ Двустранно_подписан_договор (2).pdf was archived; the later E2E test copy changes only PDF metadata so its SHA-256 differs and deduplication cannot bypass Vision.
+
+### Nextcloud MetaVox display checkpoint
+
+Nextcloud MetaVox now exposes the Corporate AI processing state directly in the Corporate AI/Incoming file list. The six fields are visible as columns: corporate_ai_status, corporate_ai_version, corporate_ai_pages, corporate_ai_chunks, corporate_ai_indexed, and corporate_ai_rag_ready.
+
+The test file A202600245-000-00_ Двустранно_подписан_договор.pdf (file ID 12914) displays READY FOR RAG, version 1, 92 pages, 348 chunks, 348 indexed and RAG ready. The other validated Incoming files were backfilled with their accepted ingestion metadata. MetaVox is the display layer; Corporate AI remains authoritative.
+
+### Current pending validation — do not mark complete yet
+
+A real 87-page scanned PDF E2E request is currently being executed through POST /v1/documents/process using the metadata-modified test file inside the Document Ingestion container, without an explicit document_id or version. The purpose is to validate the full real path after the Vision JSON-mode fix: upload → security → PDF routing → 87-page Vision → normalization → chunking → Knowledge Engine/Qdrant → READY.
+
+The current request is still pending a final HTTP response. A previous monitoring attempt queried the non-existent /v1/documents/status endpoint and correctly returned HTTP 404; the valid status route is /v1/documents/{ingestion_id}/status, but the ingestion ID is not yet known from the running terminal request. Do not treat the 404 as an ingestion failure and do not interrupt the active E2E request.
+
+### Post-E2E next steps
+
+After the 87-page E2E result is known, update this checkpoint with the actual ingestion/document IDs and persisted status. Then continue with representative-format acceptance and the remaining Open WebUI upload integration work. No additional Vision code changes are planned unless the E2E test exposes a new defect.
