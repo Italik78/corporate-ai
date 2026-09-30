@@ -541,3 +541,43 @@ Expected acceptance path:
 multipart upload → security → PDF routing → 87-page Vision → normalization → chunking → Knowledge Engine → embedding → Qdrant → READY/CURRENT
 
 Do not use /v1/documents/status; the valid job-status endpoint requires the actual ingestion ID: /v1/documents/{ingestion_id}/status. The current HTTP request must be allowed to finish before evaluating the result.
+
+
+## Nextcloud clean E2E acceptance — 2026-09-30
+
+The Nextcloud poller was validated against a genuinely new PDF through the production-oriented `POST /v1/documents/ingest` entry point.
+
+Test document:
+```
+уведомително писмо ДБТ _signed.pdf
+```
+
+Observed runtime path:
+
+```
+Nextcloud WebDAV
+  → Nextcloud poller
+  → POST /v1/documents/ingest
+  → Document Ingestion pipeline
+  → Knowledge Engine / Qdrant
+  → MetaVox write-back
+```
+
+Acceptance result:
+- Nextcloud download: successful.
+- Ingestion status: `READY`.
+- document_id: `b4a8fd9c-1d4d-4199-8e3e-0e1df252c80a`.
+- version: 1.
+- page_count: 1.
+- chunk_count: 1.
+- indexed_count: 1.
+- warnings: `[]`.
+- MetaVox status: `READY FOR RAG`.
+- `rag_ready=1`.
+- The next poll skipped the unchanged file using its unchanged ETag.
+
+This is the accepted clean happy path for the current Nextcloud document entry point. It is distinct from earlier duplicate-reuse tests and therefore does not depend on `DUPLICATE_CONTENT_REUSED`.
+
+A separate earlier first attempt for another new PDF returned HTTP 422. After retry, that file also reached READY. The 422 exposed a useful pipeline-error detail path; it does not invalidate this clean acceptance case.
+
+The remaining production acceptance items are outside this specific Nextcloud clean-path milestone: Open WebUI upload routing, independent Open WebUI `file-*` collection prevention, scanned/complex PDF OCR/Vision E2E, and validation of poller state durability across container restart.
