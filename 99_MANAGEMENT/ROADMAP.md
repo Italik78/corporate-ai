@@ -277,3 +277,26 @@ Focus:
 - [ ] Persistent poller state across container restart
 
 The Nextcloud changed-file → stable logical document → automatic version progression path is accepted on the DGX runtime.
+
+
+## 2026-09-30 — Validation checkpoint
+
+### Completed / validated since the previous checkpoint
+- [x] .xls format ingestion through the Nextcloud poller → Document Ingestion → Qdrant/Knowledge Engine path.
+- [x] Large multipart staging hardening: Document Ingestion /tmp increased to 512 MB; transport no longer fails at the previous 64 MB tmpfs boundary.
+- [x] page_count included in successful IngestResponse for PDF processing.
+- [x] Vision structured-output hardening: JSON response mode plus max_tokens=4096.
+- [x] Direct 87-page scanned-PDF Vision component test: 87/87 pages returned valid structured results.
+- [x] Nextcloud MetaVox display columns for Corporate AI status/version/pages/chunks/indexed/RAG-ready.
+- [x] MetaVox backfill of the validated Corporate AI/Incoming test files.
+- [x] Post-restart health validation of the active ingestion, Knowledge Engine, Gateway, embedding, Qdrant, PostgreSQL, Qwen3.6 and poller services.
+
+### Still open
+- [ ] Complete the currently running real 87-page scanned-PDF E2E through /v1/documents/process after the Vision JSON-mode fix.
+- [ ] Persist and report the resulting ingestion/document IDs, lifecycle state, chunk/index/page counts and any warnings/errors.
+- [ ] Validate representative remaining document formats and current production acceptance path.
+- [ ] Implement/validate Open WebUI upload → Corporate AI Document Ingestion routing.
+- [ ] Prevent independent Open WebUI file-* production vector collections for Corporate AI knowledge.
+- [ ] Make Nextcloud poller state durable across container restart.
+
+Important monitoring correction: /v1/documents/status is not a valid route. The accepted status endpoint is /v1/documents/{ingestion_id}/status. The ingestion ID must be obtained from the active request result/logs or persistent job record before using that endpoint.
