@@ -44,9 +44,11 @@ Completed:
 - lifecycle filtering by `CURRENT` was validated against real document versions.
 - legacy document identity cleanup was validated: the old `proekt.docx` record and its 20 Qdrant chunks were moved from `CURRENT` to `ARCHIVED`, while the canonical source was preserved.
 - final accounting-project RAG validation with `lifecycle_status=CURRENT` returned only the current `проект.docx` v2 source and produced `grounded=True`, `answer_status=FULL`.
+- Nextcloud poller → Document Ingestion → MetaVox end-to-end path validated with a real PDF without warnings: `уведомително писмо ДБТ _signed.pdf` reached `READY`, 1 page, 1 chunk, 1 indexed chunk and `warnings=[]`; MetaVox was updated to `READY FOR RAG`, `rag_ready=1`.
 
 Current status:
 - Universal file ingestion foundation is accepted for the validated XLSX path.
+- Nextcloud production-style polling path is validated for representative PDF, DOCX, XLS and PPTX inputs, including a clean no-warning PDF run.
 - Current document-questioning/RAG path is accepted for further representative-document testing.
 - Current-source filtering is verified after cleanup of the known legacy document identity.
 - Repository archive/delete/restore semantics remain a Phase 2 gap; the legacy cleanup was a one-off controlled migration, not a new operational API.
@@ -104,14 +106,52 @@ Target:
 
 Research planner; search/fetch; source classification; evidence; cross-checking; citations; prompt-injection isolation.
 
-**Status: ARCHITECTURE BASELINE**
+**Status: IMPLEMENTATION READY / NOT STARTED**
 
-Target:
-- controlled Internet access outside Qwen.
-- primary-source preference.
-- evidence/conflict handling.
-- research report generation.
-- long-running research tasks.
+Architecture and implementation specification:
+- `06_WEB_RESEARCH/WEBSEARCH_AGENT_SPEC.md`
+
+Principles:
+- Qwen3.6 has no unrestricted Internet access.
+- Web access is provided only through a controlled WebSearch capability.
+- Initial search provider is self-hosted SearXNG with explicitly configured engines.
+- Search and URL fetching are policy-controlled operations.
+- Web content is untrusted data and cannot modify system policy, tool permissions or ACL.
+- SSRF protection and internal-network blocking are mandatory.
+- Web evidence uses source IDs, URLs, hashes, timestamps, source metadata and citation IDs.
+- Conflicting sources produce explicit conflict evidence rather than silent source selection.
+- Research is bounded by search, fetch, iteration, size, timeout and concurrency limits.
+- Initial validation is performed entirely through the DGX Spark runtime and SSH before Open WebUI integration.
+
+Implementation sequence:
+1. WEBSEARCH-001 — repository/runtime/network inspection.
+2. WEBSEARCH-002 — API contracts and data models.
+3. WEBSEARCH-003 — pinned SearXNG service and explicit engine configuration.
+4. WEBSEARCH-004 — WebSearch service with `/health` and `/v1/search`.
+5. WEBSEARCH-005 — controlled `/v1/fetch` with SSRF and resource limits.
+6. WEBSEARCH-006 — evidence normalization and provenance.
+7. WEBSEARCH-007 — bounded `/v1/research` workflow.
+8. WEBSEARCH-008 — evidence conflict handling.
+9. WEBSEARCH-009 — prompt-injection isolation and adversarial tests.
+10. WEBSEARCH-010 — explicit-web, internal-only and internal-first → web-fallback modes.
+11. WEBSEARCH-011 — complete SSH-based DGX E2E acceptance.
+12. WEBSEARCH-012 — Agent/Orchestrator integration.
+13. WEBSEARCH-013 — documentation, measurements and release checkpoint.
+
+Acceptance target:
+- basic Bulgarian and English search
+- freshness constraints
+- domain allowlists
+- multi-source research
+- deduplication
+- unavailable sources
+- conflicts
+- SSRF/private-network blocking
+- size/time/concurrency budgets
+- prompt-injection isolation
+- citation/provenance correctness
+- all three operating modes
+- complete DGX Spark E2E validation
 
 ## Phase 7 — User and Operations Layer
 
