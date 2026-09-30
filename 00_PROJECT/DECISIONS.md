@@ -69,3 +69,14 @@
 49. The validated Nextcloud flow uses ETag change detection, downloads the changed file, submits it through /v1/documents/ingest, and preserves source_system="nextcloud" plus the source path as source_reference.
 50. Version lifecycle transitions are validated on the DGX runtime: the previous version becomes SUPERSEDED, the new version becomes CURRENT, and supersedes / superseded_by relationships are persisted.
 51. Persistent Nextcloud poller state across container restart remains a separate hardening task; the current state file is ephemeral and is not yet accepted as production-durable state.
+
+
+## 2026-09-30 — Vision, staging and UI decisions
+
+52. PDF Vision structured-output calls use JSON response mode (response_format={"type":"json_object"}) with max_tokens=4096. This is a stability measure for scanned/complex PDF pages and was validated against an 87-page scanned PDF component test with 87/87 valid page results.
+53. The successful PDF Vision component test is not by itself production E2E acceptance. The real /v1/documents/process path must still be completed and its persisted READY/CURRENT state verified before marking the scanned-PDF E2E requirement complete.
+54. Document Ingestion uses a 512 MB /tmp tmpfs because multipart upload staging can require more than the previous 64 MB boundary. This is a bounded runtime fix, not a change to the canonical storage architecture.
+55. page_count is part of the successful IngestResponse contract for PDF processing so callers can populate operational UI metadata without changing the persistent document-version schema.
+56. Nextcloud MetaVox is the current display-layer mechanism for showing Corporate AI processing state in the Nextcloud file list. It does not replace Corporate AI as the authoritative metadata, ingestion or retrieval system.
+57. The current Corporate AI file-list display fields are status, version, pages, chunks, indexed count and RAG-ready state. These are operational presentation metadata and must be sourced from the authoritative ingestion result rather than independently computed by Nextcloud.
+58. The monitoring route is /v1/documents/{ingestion_id}/status; /v1/documents/status does not exist and a 404 from that path is expected. The active E2E request must not be interrupted because of that monitoring mistake.
