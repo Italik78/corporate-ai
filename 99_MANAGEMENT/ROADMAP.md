@@ -263,8 +263,9 @@ Focus:
 - deployment reproducibility.
 
 
-## Universal Document Ingestion — Nextcloud acceptance — 2026-09-28
+## Universal Document Ingestion — Nextcloud acceptance — 2026-09-30
 
+### Versioning acceptance
 - [x] Nextcloud ETag change detection
 - [x] Changed file submitted to Document Ingestion
 - [x] Stable source_reference for the Nextcloud path
@@ -274,9 +275,18 @@ Focus:
 - [x] New version transitions to CURRENT
 - [x] supersedes / superseded_by relationships persisted
 - [x] Version-specific canonical storage validated
+
+### Clean production-entry acceptance
+- [x] New file detected and downloaded from Nextcloud WebDAV
+- [x] New file reaches `POST /v1/documents/ingest` successfully
+- [x] Real pipeline reaches `READY`
+- [x] Clean case has `warnings=[]` and no duplicate-reuse path
+- [x] Chunks are indexed successfully
+- [x] MetaVox receives `READY FOR RAG` and `rag_ready=1`
+- [x] Unchanged file is skipped on the following ETag poll
 - [ ] Persistent poller state across container restart
 
-The Nextcloud changed-file → stable logical document → automatic version progression path is accepted on the DGX runtime.
+Acceptance result: the Nextcloud → Document Ingestion → Knowledge Engine/Qdrant → MetaVox clean happy path is COMPLETE on the DGX runtime. Persistent state across restart remains a separate hardening item.
 
 
 ## 2026-09-30 — Validation checkpoint
@@ -292,11 +302,10 @@ The Nextcloud changed-file → stable logical document → automatic version pro
 - [x] Post-restart health validation of the active ingestion, Knowledge Engine, Gateway, embedding, Qdrant, PostgreSQL, Qwen3.6 and poller services.
 
 ### Still open
-- [ ] Complete the currently running real 87-page scanned-PDF E2E through /v1/documents/process after the Vision JSON-mode fix.
-- [ ] Persist and report the resulting ingestion/document IDs, lifecycle state, chunk/index/page counts and any warnings/errors.
+- [ ] Complete the real scanned/complex PDF E2E through the production ingestion entry point after the Vision JSON-mode fix.
 - [ ] Validate representative remaining document formats and current production acceptance path.
 - [ ] Implement/validate Open WebUI upload → Corporate AI Document Ingestion routing.
 - [ ] Prevent independent Open WebUI file-* production vector collections for Corporate AI knowledge.
-- [ ] Make Nextcloud poller state durable across container restart.
+- [ ] Validate Nextcloud poller state durability across container restart.
 
 Important monitoring correction: /v1/documents/status is not a valid route. The accepted status endpoint is /v1/documents/{ingestion_id}/status. The ingestion ID must be obtained from the active request result/logs or persistent job record before using that endpoint.
