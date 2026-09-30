@@ -80,3 +80,25 @@ The platform must run initially on one DGX Spark and later distribute LLM, worke
 ## Quality
 
 The system must distinguish supported evidence, conflicting evidence and insufficient evidence. It must never manufacture citations or silently select unsupported facts.
+
+## Controlled Web Research
+
+The Web Research capability must satisfy the following requirements:
+
+- Qwen3.6 must not have unrestricted Internet access.
+- Web access must pass through a controlled WebSearch capability.
+- The initial search provider must be self-hosted SearXNG with an explicit engine configuration.
+- Search and URL fetching must be policy-controlled operations.
+- URL fetching must enforce SSRF protection and block localhost, private/reserved addresses and internal service networks.
+- URL fetching must enforce timeout, response-size, redirect, content-type and concurrency limits.
+- Web content must be treated as untrusted data and must not modify system/developer policy, tool permissions, ACL, credentials or research limits.
+- Web evidence must preserve URL, canonical URL, domain, timestamps, content hash and retrieval provenance.
+- Web evidence must have stable evidence and citation identifiers.
+- Web Research must distinguish SUPPORTED, CONFLICT, INSUFFICIENT_EVIDENCE and UNAVAILABLE states.
+- Conflicting factual sources must not be silently resolved by the LLM.
+- Research execution must have hard limits for searches, results, fetches, iterations, execution time and response size.
+- The service must support explicit-web, internal-only and internal-first → web-fallback operating modes.
+- Domain allowlists must be supported for specialized research policies.
+- The first implementation must be validated through SSH on the DGX Spark before Open WebUI integration.
+- Security acceptance must include SSRF and prompt-injection adversarial tests.
+- Complete source provenance and citation correctness must be verified in E2E tests.
