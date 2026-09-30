@@ -21,6 +21,13 @@
 - Document ingestion contract mismatch between metadata/version registration and downstream indexing.
 - Duplicate/version detection errors causing duplicate documents or incorrect version state.
 - Partial ingestion failures leaving metadata, canonical storage and index state inconsistent.
+- Web Search provider outage or engine-specific failures.
+- Web source disappearance or content changes after initial retrieval.
+- Search-result manipulation or low-quality source dominance.
+- SSRF through malicious or redirected Web URLs.
+- Web content prompt injection attempting to influence Agent or tool execution.
+- Excessive Web Research causing uncontrolled network, CPU, memory or latency consumption.
+- Web evidence conflicts producing unsupported synthesis.
 
 ## Mitigations
 
@@ -39,3 +46,11 @@
 - content-hash based duplicate/version detection with targeted regression tests
 - real-document end-to-end acceptance before marking ingestion complete
 - controlled failure states and persisted ingestion error codes
+- explicit SearXNG engine configuration and health monitoring
+- bounded Web Research search/fetch/iteration/size/time/concurrency budgets
+- SSRF protection and internal-network blocking
+- strict untrusted-content isolation for Web pages
+- adversarial prompt-injection tests
+- source classification and provenance
+- explicit conflict and insufficient-evidence states
+- reproducible fetched-content hashes and retrieval timestamps
