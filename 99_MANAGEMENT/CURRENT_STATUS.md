@@ -1,6 +1,6 @@
 # CURRENT STATUS
 
-**Checkpoint:** 2026-09-28
+**Checkpoint:** 2026-09-30
 
 ## Project
 
@@ -107,14 +107,26 @@ The warnings are non-fatal PyMuPDF deprecation warnings and pytest cache permiss
 
 ### Current acceptance state
 
-Task 2 is **implementation foundation complete but not closed**.
+The **Nextcloud production document entry-point / poller E2E acceptance is COMPLETE** on the DGX runtime.
 
-Still pending:
-1. Real DGX runtime validation of the current source-reference changes.
-2. Open WebUI upload → Document Ingestion routing.
-3. Validation that Open WebUI does not create independent `file-*` production collections.
-4. Complete end-to-end acceptance through PostgreSQL → canonical storage → Knowledge Engine/Qdrant.
-5. PDF OCR/Vision integration for scanned and complex pages.
+Validated with a genuinely new PDF, without duplicate reuse:
+- Nextcloud WebDAV download succeeded.
+- `POST /v1/documents/ingest` returned success and the pipeline reached `READY`.
+- Version 1 was registered.
+- PDF page count: 1.
+- Chunks: 1.
+- Indexed: 1.
+- Warnings: `[]`.
+- MetaVox write-back succeeded with `READY FOR RAG` and `rag_ready=1`.
+- The following poll correctly skipped the unchanged file by ETag.
+
+This closes the current Nextcloud → Document Ingestion → Knowledge Engine/Qdrant → MetaVox acceptance task.
+
+Still pending for the broader Task 2 / production scope:
+1. Open WebUI upload → Document Ingestion routing.
+2. Validation that Open WebUI does not create independent `file-*` production collections.
+3. Complete acceptance of scanned/complex PDF OCR/Vision through the production entry point.
+4. Durable poller-state validation across container restart.
 
 ## Open WebUI discovery checkpoint
 
@@ -285,3 +297,23 @@ The current request is still pending a final HTTP response. A previous monitorin
 ### Post-E2E next steps
 
 After the 87-page E2E result is known, update this checkpoint with the actual ingestion/document IDs and persisted status. Then continue with representative-format acceptance and the remaining Open WebUI upload integration work. No additional Vision code changes are planned unless the E2E test exposes a new defect.
+
+
+## 2026-09-30 — Nextcloud clean E2E acceptance
+
+A new document, `уведомително писмо ДБТ _signed.pdf`, was processed through the real Nextcloud poller path with no duplicate reuse and no warnings.
+
+Acceptance result:
+- download: successful;
+- ingestion: `READY`;
+- document_id: `b4a8fd9c-1d4d-4199-8e3e-0e1df252c80a`;
+- version: 1;
+- pages: 1;
+- chunks: 1;
+- indexed: 1;
+- warnings: `[]`;
+- MetaVox: `READY FOR RAG`;
+- `rag_ready=1`;
+- subsequent unchanged-file poll: correctly skipped by ETag.
+
+The clean happy path is therefore accepted. A separate earlier 422 on `A202600303 Двустранно подписан.pdf` was successfully retried and is not part of this clean acceptance case; its successful retry also confirmed the error-detail logging path and duplicate reconstruction behavior.
