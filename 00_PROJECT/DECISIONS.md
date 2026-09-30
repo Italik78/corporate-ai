@@ -48,23 +48,6 @@
 38. The `DocumentVersionResponse.tags` incident was traced to a stale pre-restart runtime, not to the current metadata/indexing contract. No response-schema workaround was introduced.
 39. Real XLSX ingestion acceptance requires metadata registration, canonical source persistence, chunk indexing and lifecycle finalization to be verified together; a READY/CURRENT record plus successful Knowledge Engine retrieval is the acceptance evidence.
 
-## Current validation checkpoint
-
-- Qwen3.6 production configuration validated: 262144 context, GPU utilization 0.65, KV FP8, tool calling enabled.
-- Qwen3.6 vision request validated.
-- Vision JSON Schema validated.
-- Qwen3-Embedding-4B local API validated with 2560-dimensional vectors and semantic similarity test.
-- Qdrant production collection corporate_knowledge validated.
-- Knowledge Engine health, search, ingest and end-to-end RAG query validated.
-- Positive grounded RAG query validated.
-- Negative query correctly returns the controlled no-answer response.
-- Retrieval of a deliberate 60 EUR / 40 EUR conflict validated.
-- Candidate numeric conflict detector validated as a prototype, but deliberately not integrated into production query flow yet.
-- Document Ingestion duplicate lookup correction validated by targeted unit test.
-- Document Ingestion application compilation, image rebuild and container startup validated.
-- Real XLSX ingestion acceptance completed successfully after rebuilding/restarting the current Document Ingestion runtime: ingestion `6e220d34-abd9-46d0-99e5-befe4c97c4b0` reached `READY`, document version `v1` is `CURRENT`, canonical storage is populated, and Knowledge Engine retrieval returns indexed chunks.
-
-
 ## 2026-09-28 — Current-source RAG validation
 
 40. Gateway RAG generation must remain grounded in retrieved document evidence and preserve both human-readable citations and structured source provenance.
@@ -73,3 +56,16 @@
 43. A legacy document identity created before stable `source_reference` support was treated as a data-migration issue, not as a retrieval-engine bug. Its PostgreSQL version and all 20 Qdrant chunks were transitioned to `ARCHIVED`; the canonical source was preserved.
 44. Final validation of the accounting-project analysis path returned only the current `проект.docx` v2 source, with `grounded=True` and `answer_status=FULL`.
 45. The current Repository abstraction does not yet expose an operational archive/deprecate method for already-CURRENT versions with guaranteed Knowledge Engine lifecycle synchronization. This remains a Phase 2 repository lifecycle gap; the 2026-09-28 legacy cleanup was a controlled one-off migration.
+
+## 2026-09-30 — Controlled Web Research baseline
+
+46. Web Research is implemented as a controlled capability outside Qwen3.6. Qwen3.6 must not receive unrestricted Internet access.
+47. The initial Web Research provider is self-hosted SearXNG, with an explicitly configured and deliberately small engine set. Additional engines require measured justification.
+48. Search and URL fetching are separate policy-controlled operations. URL fetching must enforce SSRF protection, internal-network blocking, timeouts, response-size limits, redirect limits, content-type validation and concurrency limits.
+49. Web pages and fetched content are untrusted data. Instructions contained in Web content must never change system policy, tool permissions, ACL, credentials, network policy, research limits or approval requirements.
+50. Web Research and internal Knowledge share the common Evidence/Provenance model while preserving the distinction between internal and web source classes.
+51. Web Research must explicitly represent SUPPORTED, CONFLICT, INSUFFICIENT_EVIDENCE and UNAVAILABLE states. The LLM must not silently choose between conflicting factual sources.
+52. Web Research must preserve source URL, canonical URL, domain, timestamps, content hash, search provenance and citation identifiers for every accepted evidence item.
+53. The initial research loop is bounded by search count, result count, fetch count, iteration count, execution time, response size and concurrency. Production limits are established through DGX measurement.
+54. The first Web Research implementation and security acceptance will be performed through SSH on the DGX Spark before Open WebUI integration.
+55. The detailed implementation sequence and Definition of Done are recorded in `06_WEB_RESEARCH/WEBSEARCH_AGENT_SPEC.md`.
