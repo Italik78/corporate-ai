@@ -80,24 +80,7 @@ Completed:
 - [x] metadata propagation to Qdrant
 - [x] version/lifecycle filters in Knowledge Engine
 - [x] DGX version/lifecycle filter acceptance validation
-
-### Universal Document Entry Point — implemented
-
-The Document Ingestion Service is now the validated authoritative entry point for external and direct document ingestion.
-
-Acceptance evidence:
-- API entry point implemented.
-- Metadata/version registry implemented.
-- `source_system` and `source_reference` provenance connected.
-- SHA-256 duplicate handling validated.
-- Canonical source persistence validated.
-- Knowledge Engine indexing validated.
-- Lifecycle finalization validated.
-- Paperless webhook path preserved.
-- 38 unit tests passing.
-- Real DGX smoke test completed with `READY` / `CURRENT`.
-
-The next validation step is the external Nextcloud source: stable source identity must produce a new version of the same logical document when the source file changes, rather than creating a second document.
+- [x] `source_reference` metadata foundation and persistence
 
 ### Phase B — Office / Tabular Normalization
 
@@ -110,27 +93,23 @@ Implemented:
 - [x] pipeline routing to format-specific extractors
 - [x] Knowledge Engine handoff through normalized chunks
 
-Pending:
+Pending / current:
 - [x] DGX build and end-to-end ingestion/RAG validation
 - [x] PDF native extraction with page/block/bbox provenance
 - [x] Paperless-ngx webhook integration
 - [x] Tika 3.3.1 + Gotenberg Office conversion path
 - [x] TXT/DOCX/XLSX Paperless → Document Ingestion → Qdrant/Knowledge Engine validation
-- [x] authoritative `/v1/documents/ingest` production entry point
-- [x] `/v1/documents/process` normalized-document path
-- [x] source provenance via `source_system` + `source_reference`
-- [x] PostgreSQL metadata/version persistence
-- [x] SHA-256 duplicate detection and duplicate reuse
-- [x] canonical original storage + persisted storage key
-- [x] Knowledge Engine indexing as ingestion acceptance step
-- [x] lifecycle/version handling and supersession foundation
-- [x] duplicate normalized-document reconstruction from indexed chunks
-- [x] real DGX smoke-test acceptance
-- [x] Document Ingestion unit suite: 38 passing tests
-- [ ] validate Nextcloud source-reference version update end-to-end
-- [ ] validate persistent Nextcloud poller state across restart
+- [x] Document Ingestion production-oriented entry points and persistent job/status foundation
+- [x] bounded upload staging and SHA-256 hashing
+- [x] Repository registration before indexing
+- [x] canonical source storage and storage-key persistence
+- [x] versioning, lifecycle, supersession and access-scope metadata flow
+- [x] duplicate reconstruction from authoritative indexed chunks
+- [x] unit regression baseline: 24 passed, 0 failed
+- [ ] validate current source-reference changes on the DGX runtime
 - [ ] validate Open WebUI upload integration with Document Ingestion
 - [ ] validate production retrieval path without Open WebUI independent file-* vector collections
+- [ ] integrate PDF OCR/Vision for scanned and complex pages
 
 ### Phase C — Open WebUI Integration & Web Search
 
@@ -154,13 +133,14 @@ Baseline:
 #### C2 — Corporate document upload and document intelligence
 - [ ] preserve Open WebUI upload UX
 - [ ] route uploads into Document Ingestion
-- [ ] register metadata/version before indexing
-- [ ] preserve original files outside Qdrant
-- [ ] validate DOCX/XLSX/PPTX/CSV end-to-end
+- [x] register metadata/version before indexing
+- [x] preserve original files outside Qdrant through the Repository/canonical storage boundary
+- [x] validate DOCX/XLSX/PPTX/CSV extraction and normalization at unit level
+- [ ] validate DOCX/XLSX/PPTX/CSV end-to-end through the UI
 - [ ] integrate PDF/OCR/Vision
-- [ ] preserve page/section/table/slide provenance
+- [x] preserve page/section/table/slide provenance in normalized blocks/chunks
 - [ ] expose document inspection and analysis operations
-- [ ] validate current/superseded version behavior
+- [ ] validate current/superseded version behavior through the final UI path
 
 #### C3 — Corporate Knowledge and Workspace layer
 - [ ] expose Corporate Knowledge through Knowledge Engine or validated external Qdrant integration
@@ -187,17 +167,19 @@ Baseline:
 - [ ] artifact provenance / source traceability
 
 #### C5 — Controlled Web Search
-- [ ] decide SearXNG vs hosted provider
-- [ ] deploy controlled search egress
-- [ ] normalize web evidence
-- [ ] implement bounded URL fetching
-- [ ] preserve URL and retrieval timestamp provenance
-- [ ] add domain/timeout/size/concurrency controls
+- [x] decide SearXNG vs hosted provider — SearXNG selected for controlled internal search egress
+- [x] deploy controlled search egress
+- [x] normalize web retrieval data and provenance
+- [x] implement bounded URL fetching
+- [x] preserve URL and retrieval timestamp provenance
+- [x] add domain/timeout/size/concurrency controls
 - [ ] isolate web prompt injection
-- [ ] keep LLM network access disabled
+- [x] keep LLM network access disabled
 - [ ] expose explicit web-search mode
 - [ ] implement internal-first/web-fallback mode
 - [ ] implement internal-only/offline mode
+- [ ] implement Web Evidence Evaluation separate from retrieval status
+- [ ] provide authoritative current date/time/timezone to the LLM
 
 #### C6 — Agent and reasoning workflows
 - [ ] Agent Controller
@@ -281,3 +263,51 @@ Focus:
 - resource contention tests.
 - security hardening.
 - deployment reproducibility.
+
+
+## Universal Document Ingestion — Nextcloud acceptance — 2026-09-30
+
+### Versioning acceptance
+- [x] Nextcloud ETag change detection
+- [x] Changed file submitted to Document Ingestion
+- [x] Stable source_reference for the Nextcloud path
+- [x] Same logical document_id reused for changed content
+- [x] New version created automatically
+- [x] Previous version transitions to SUPERSEDED
+- [x] New version transitions to CURRENT
+- [x] supersedes / superseded_by relationships persisted
+- [x] Version-specific canonical storage validated
+
+### Clean production-entry acceptance
+- [x] New file detected and downloaded from Nextcloud WebDAV
+- [x] New file reaches `POST /v1/documents/ingest` successfully
+- [x] Real pipeline reaches `READY`
+- [x] Clean case has `warnings=[]` and no duplicate-reuse path
+- [x] Chunks are indexed successfully
+- [x] MetaVox receives `READY FOR RAG` and `rag_ready=1`
+- [x] Unchanged file is skipped on the following ETag poll
+- [ ] Persistent poller state across container restart
+
+Acceptance result: the Nextcloud → Document Ingestion → Knowledge Engine/Qdrant → MetaVox clean happy path is COMPLETE on the DGX runtime. Persistent state across restart remains a separate hardening item.
+
+
+## 2026-09-30 — Validation checkpoint
+
+### Completed / validated since the previous checkpoint
+- [x] .xls format ingestion through the Nextcloud poller → Document Ingestion → Qdrant/Knowledge Engine path.
+- [x] Large multipart staging hardening: Document Ingestion /tmp increased to 512 MB; transport no longer fails at the previous 64 MB tmpfs boundary.
+- [x] page_count included in successful IngestResponse for PDF processing.
+- [x] Vision structured-output hardening: JSON response mode plus max_tokens=4096.
+- [x] Direct 87-page scanned-PDF Vision component test: 87/87 pages returned valid structured results.
+- [x] Nextcloud MetaVox display columns for Corporate AI status/version/pages/chunks/indexed/RAG-ready.
+- [x] MetaVox backfill of the validated Corporate AI/Incoming test files.
+- [x] Post-restart health validation of the active ingestion, Knowledge Engine, Gateway, embedding, Qdrant, PostgreSQL, Qwen3.6 and poller services.
+
+### Still open
+- [ ] Complete the real scanned/complex PDF E2E through the production ingestion entry point after the Vision JSON-mode fix.
+- [ ] Validate representative remaining document formats and current production acceptance path.
+- [ ] Implement/validate Open WebUI upload → Corporate AI Document Ingestion routing.
+- [ ] Prevent independent Open WebUI file-* production vector collections for Corporate AI knowledge.
+- [ ] Validate Nextcloud poller state durability across container restart.
+
+Important monitoring correction: /v1/documents/status is not a valid route. The accepted status endpoint is /v1/documents/{ingestion_id}/status. The ingestion ID must be obtained from the active request result/logs or persistent job record before using that endpoint.

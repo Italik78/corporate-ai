@@ -1,0 +1,23 @@
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: corporate-ai-searxng
+    restart: unless-stopped
+    volumes:
+      - ../config/searxng:/etc/searxng:ro
+    networks:
+      - ai-net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /var/cache/searxng:size=64m
+    environment:
+      SEARXNG_PORT: "8080"
+
+networks:
+  ai-net:
+    external: true

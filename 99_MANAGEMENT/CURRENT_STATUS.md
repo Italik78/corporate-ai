@@ -1,6 +1,6 @@
 # CURRENT STATUS
 
-**Checkpoint:** 2026-09-21
+**Checkpoint:** 2026-09-30
 
 ## Project
 
@@ -67,6 +67,67 @@ Architecture:
 - Original documents remain in Object Storage; Qdrant is an index, not the source of truth.
 - Large-document work is retrieval-first for ordinary questions and planned/bounded for whole-document analysis.
 
+## Document Ingestion — current implementation checkpoint
+
+The Document Ingestion Service now provides the production-oriented intake foundation required for Task 2.
+
+Implemented:
+- `POST /v1/documents/ingest` multipart upload entry point.
+- `POST /v1/documents/process` entry point returning the normalized document.
+- `POST /v1/integrations/paperless/webhook` controlled Paperless boundary with secret validation.
+- Persistent `ingestion_jobs` status records in PostgreSQL.
+- Bounded upload staging with filename/extension/size validation and SHA-256 hashing.
+- Repository registration before indexing.
+- Canonical source storage and canonical storage key persistence.
+- Versioning, SHA-256 deduplication, lifecycle and supersession handling.
+- Project and access-scope metadata.
+- `source_reference` as a first-class metadata field across models, PostgreSQL version records, pipeline paths and duplicate reconstruction.
+- Paperless source namespace `paperless:{document_id}`.
+- Duplicate reconstruction from authoritative indexed chunks, preserving source metadata and provenance.
+- Normalized extraction tests for TXT, Markdown, CSV, DOCX, XLSX, PPTX and native PDF text.
+
+### Latest test checkpoint
+
+`services/document-ingestion/tests/test_unit.py`
+
+**24 passed, 0 failed, 6 warnings**
+
+The warnings are non-fatal PyMuPDF deprecation warnings and pytest cache permission warnings.
+
+### Source-reference change sequence validated by compilation
+
+- `models.py` source-reference update → compile OK.
+- `metadata.py` schema/source-reference updates → compile OK.
+- `metadata.py` row mapping update → compile OK.
+- `metadata.py` `register_version` source-reference persistence → compile OK.
+- `pipeline.py` source-reference lookup and metadata propagation → compile OK.
+- `main.py` `/v1/documents/ingest` and `/v1/documents/process` source-reference-related updates → compile OK.
+- Paperless webhook source-reference integration → compile OK.
+- Duplicate reconstruction fixture updated with `source_reference=None`; focused test passed and the full unit suite then passed.
+
+### Current acceptance state
+
+The **Nextcloud production document entry-point / poller E2E acceptance is COMPLETE** on the DGX runtime.
+
+Validated with a genuinely new PDF, without duplicate reuse:
+- Nextcloud WebDAV download succeeded.
+- `POST /v1/documents/ingest` returned success and the pipeline reached `READY`.
+- Version 1 was registered.
+- PDF page count: 1.
+- Chunks: 1.
+- Indexed: 1.
+- Warnings: `[]`.
+- MetaVox write-back succeeded with `READY FOR RAG` and `rag_ready=1`.
+- The following poll correctly skipped the unchanged file by ETag.
+
+This closes the current Nextcloud → Document Ingestion → Knowledge Engine/Qdrant → MetaVox acceptance task.
+
+Still pending for the broader Task 2 / production scope:
+1. Open WebUI upload → Document Ingestion routing.
+2. Validation that Open WebUI does not create independent `file-*` production collections.
+3. Complete acceptance of scanned/complex PDF OCR/Vision through the production entry point.
+4. Durable poller-state validation across container restart.
+
 ## Open WebUI discovery checkpoint
 
 The Open WebUI container is already attached to `ai-net`:
@@ -94,50 +155,6 @@ The Open WebUI target is broader than upload integration. We will use its capabi
 
 These UI capabilities must remain backed by Corporate AI authoritative services where business/security/provenance matters.
 
-## Universal Document Ingestion / Production Entry Point — implemented
-
-The Document Ingestion Service now provides the validated production entry point for corporate documents.
-
-Implemented and validated:
-- `/v1/documents/ingest` as the authoritative document entry point.
-- `/v1/documents/process` for explicit normalized-document processing/return.
-- `source_system` propagation through the ingestion pipeline.
-- `source_reference` propagation through the ingestion metadata path.
-- PostgreSQL document-version registry with persistent provenance.
-- SHA-256 duplicate detection and duplicate reuse.
-- Stable logical document identity support for externally sourced documents.
-- Automatic version progression for an existing logical document when new content is submitted.
-- Lifecycle handling through INGESTING → CURRENT / SUPERSEDED.
-- Canonical source storage with persisted `canonical_storage_key`.
-- Knowledge Engine indexing as part of the ingestion critical path.
-- Document reconstruction from existing Knowledge Engine chunks for duplicate process requests.
-- Paperless webhook boundary with stable `paperless:{document_id}` document identity.
-- Metadata propagation for classification, access scope, tags, dates and project information.
-- Real DGX smoke test completed successfully with `READY`, `CURRENT`, one indexed chunk and persisted canonical storage.
-- Document Ingestion unit suite currently passes **38 tests**.
-
-Validated runtime smoke-test result:
-- service: `document-ingestion`
-- version: `0.3.0`
-- health: `ok`
-- metadata database: available
-- Knowledge Engine: available
-- test document: `smoke-test-001`
-- version: `1`
-- lifecycle: `CURRENT`
-- status: `READY`
-- indexed chunks: `1`
-- canonical storage key: `documents/smoke-test-001/original/1/corporate-ai-smoke.txt`
-
-This establishes Document Ingestion as a real validated entry point rather than only an architectural or unit-test foundation.
-
-Still pending:
-- Nextcloud polling/source-reference end-to-end version update validation.
-- Persistent poller state across container restart.
-- Open WebUI upload → Document Ingestion integration.
-- Production retrieval path validation without independent Open WebUI `file-*` vector collections.
-- Full PDF/OCR/Vision integration acceptance.
-
 ## Current phase
 
 ### PHASE 3: Knowledge / Grounded Reasoning + Corporate Information System foundation
@@ -159,23 +176,29 @@ Completed:
 - PDF native extraction with PyMuPDF 1.26.4, including page/block/bbox provenance.
 - Paperless-ngx integration with Tika 3.3.1 and Gotenberg validated.
 - Paperless → Document Ingestion → Knowledge Engine/Qdrant E2E validated for TXT, DOCX and XLSX.
+- Persistent ingestion job/status foundation.
+- Production-oriented `/v1/documents/ingest` and `/v1/documents/process` entry points.
+- `source_reference` metadata foundation and persistence.
+- Duplicate reconstruction from indexed chunks.
+- Full document-ingestion unit baseline: 24 passed, 0 failed.
 - Open WebUI architecture and Web Search baseline.
 - Open WebUI confirmed on `ai-net`.
 
 ## Immediate execution order
 
-1. **C1.1 — Inspect installed Open WebUI capabilities/version.**
-2. **C1.2 — Validate Corporate Knowledge retrieval path without mismatched embeddings.**
-3. **C1.3 — Validate Open WebUI Knowledge / Folder / System Prompt behavior.**
-4. **C1.4 — Validate Filter/file_handler and OpenAPI/MCP extension points.**
-5. **C2.1 — Implement controlled Open WebUI upload → Document Ingestion path.**
-6. **C2.2 — Validate XLSX/DOCX/PPTX/CSV through the UI.**
-7. **C2.3 — Integrate PDF/OCR/Vision.**
-8. **C3 — Build authoritative Corporate Knowledge workspace integration.**
-9. **C4 — Add document analysis and artifact tools.**
-10. **C5 — Add controlled Web Search.**
-11. **C6 — Integrate Agent workflows.**
-12. **C7 — Execute complete DGX acceptance suite.**
+1. **C2.1 / Task 2 acceptance — validate current ingestion changes on the DGX runtime.**
+2. **C1.1 — Inspect installed Open WebUI capabilities/version.**
+3. **C1.2 — Validate Corporate Knowledge retrieval path without mismatched embeddings.**
+4. **C1.3 — Validate Open WebUI Knowledge / Folder / System Prompt behavior.**
+5. **C1.4 — Validate Filter/file_handler and OpenAPI/MCP extension points.**
+6. **C2.1 — Implement controlled Open WebUI upload → Document Ingestion path.**
+7. **C2.2 — Validate XLSX/DOCX/PPTX/CSV through the UI.**
+8. **C2.3 — Integrate PDF/OCR/Vision.**
+9. **C3 — Build authoritative Corporate Knowledge workspace integration.**
+10. **C4 — Add document analysis and artifact tools.**
+11. **C5 — Add controlled Web Search.**
+12. **C6 — Integrate Agent workflows.**
+13. **C7 — Execute complete DGX acceptance suite.**
 
 ## Execution discipline
 
@@ -222,3 +245,101 @@ Validated examples:
 - XLSX: Paperless document ID 11 → successful conversion/webhook → `paperless:11` retrieval with TABLE provenance.
 
 Known non-blocking observation: one XLSX test produced a Paperless webhook timeout log after the Document Ingestion service had already processed the request successfully. The current Paperless webhook client uses a short 5-second timeout; asynchronous acknowledgement/timeout hardening remains a future improvement.
+
+
+## Nextcloud poller — runtime acceptance — 2026-09-28
+
+The Nextcloud lab/source integration is now validated for changed-file versioning on the DGX runtime.
+
+Validated:
+- ETag change detection for the same Nextcloud path.
+- Unchanged file is skipped when the ETag is unchanged.
+- Changed valid DOCX is downloaded and submitted to Document Ingestion.
+- source_system="nextcloud" and source_reference="Corporate AI/Incoming/проект.docx" are persisted.
+- The same logical document_id is retained after the content changes.
+- Changed content creates version 2.
+- Version 1 becomes SUPERSEDED and version 2 becomes CURRENT.
+- supersedes / superseded_by relationships are persisted.
+- Canonical storage is version-specific for each document version.
+
+Acceptance result: Nextcloud changed-file → same document_id → new version → lifecycle transition is COMPLETE.
+
+Still pending for the broader task:
+- persistent poller state across container restart;
+- Open WebUI upload → Document Ingestion routing;
+- final production E2E acceptance for all required UI and multimodal paths.
+
+
+## 2026-09-30 — DGX restart, Vision stabilization and Nextcloud UI checkpoint
+
+After the DGX restart/update the active stack was revalidated. The critical services are healthy: Document Ingestion 0.3.0 on :8095, Knowledge Engine 0.3.1-test on :8093, Gateway 0.3.3 on :8096, Qwen3.6, Qdrant, PostgreSQL and Nextcloud poller. The local Qwen3-Embedding-4B service was restarted after reboot and Knowledge Engine/Gateway health returned to fully OK.
+
+### Document Ingestion fixes validated
+
+- .xls ingestion is implemented and validated end-to-end through Nextcloud poller → Document Ingestion → Qdrant → Knowledge Engine.
+- Multipart upload staging was hardened by increasing the Document Ingestion /tmp tmpfs to 512 MB; the previous 64 MB limit caused large multipart failures. A real 1.5 MB PDF subsequently reached application-level EMPTY_DOCUMENT, proving the transport limit was removed.
+- IngestResponse now exposes page_count; successful PDF ingestion returns page count together with chunk/index counts.
+- PDF Vision calls now request structured JSON with response_format={"type":"json_object"} and max_tokens=4096. A direct 87-page scanned-PDF Vision validation returned 87/87 successful pages with no PDF_VISION_INVALID_JSON failures. This closes the previously observed nondeterministic Vision JSON parsing defect at component-test level.
+- The failed duplicate of A202401001-000-00_ Двустранно_подписан_договор (2).pdf was archived; the later E2E test copy changes only PDF metadata so its SHA-256 differs and deduplication cannot bypass Vision.
+
+### Nextcloud MetaVox display checkpoint
+
+Nextcloud MetaVox now exposes the Corporate AI processing state directly in the Corporate AI/Incoming file list. The six fields are visible as columns: corporate_ai_status, corporate_ai_version, corporate_ai_pages, corporate_ai_chunks, corporate_ai_indexed, and corporate_ai_rag_ready.
+
+The test file A202600245-000-00_ Двустранно_подписан_договор.pdf (file ID 12914) displays READY FOR RAG, version 1, 92 pages, 348 chunks, 348 indexed and RAG ready. The other validated Incoming files were backfilled with their accepted ingestion metadata. MetaVox is the display layer; Corporate AI remains authoritative.
+
+### Current pending validation — do not mark complete yet
+
+A real 87-page scanned PDF E2E request is currently being executed through POST /v1/documents/process using the metadata-modified test file inside the Document Ingestion container, without an explicit document_id or version. The purpose is to validate the full real path after the Vision JSON-mode fix: upload → security → PDF routing → 87-page Vision → normalization → chunking → Knowledge Engine/Qdrant → READY.
+
+The current request is still pending a final HTTP response. A previous monitoring attempt queried the non-existent /v1/documents/status endpoint and correctly returned HTTP 404; the valid status route is /v1/documents/{ingestion_id}/status, but the ingestion ID is not yet known from the running terminal request. Do not treat the 404 as an ingestion failure and do not interrupt the active E2E request.
+
+### Post-E2E next steps
+
+After the 87-page E2E result is known, update this checkpoint with the actual ingestion/document IDs and persisted status. Then continue with representative-format acceptance and the remaining Open WebUI upload integration work. No additional Vision code changes are planned unless the E2E test exposes a new defect.
+
+
+## 2026-09-30 — Nextcloud clean E2E acceptance
+
+A new document, `уведомително писмо ДБТ _signed.pdf`, was processed through the real Nextcloud poller path with no duplicate reuse and no warnings.
+
+Acceptance result:
+- download: successful;
+- ingestion: `READY`;
+- document_id: `b4a8fd9c-1d4d-4199-8e3e-0e1df252c80a`;
+- version: 1;
+- pages: 1;
+- chunks: 1;
+- indexed: 1;
+- warnings: `[]`;
+- MetaVox: `READY FOR RAG`;
+- `rag_ready=1`;
+- subsequent unchanged-file poll: correctly skipped by ETag.
+
+The clean happy path is therefore accepted. A separate earlier 422 on `A202600303 Двустранно подписан.pdf` was successfully retried and is not part of this clean acceptance case; its successful retry also confirmed the error-detail logging path and duplicate reconstruction behavior.
+
+
+## 2026-10-01 — Controlled Web Search / Gateway tool-loop checkpoint
+
+### Completed and validated
+
+- Controlled Web Search egress is deployed through SearXNG on the internal `ai-net`; the LLM itself has no unrestricted network access.
+- Corporate AI Gateway exposes bounded `web_search` and `web_fetch` tools with explicit request validation and security limits.
+- Qwen3.6 native tool calling was validated directly against the real Gateway tool schema.
+- Gateway general chat now executes a bounded server-side tool loop, with a maximum of 4 tool iterations.
+- The tool dispatcher validates tool arguments through the corresponding Pydantic request models before execution.
+- `web_search` returns `retrieval_status=FOUND|NO_RESULTS` and preserves the raw search ranking as `ranking_score`.
+- `web_fetch` returns `retrieval_status=FOUND|NO_RESULTS` and marks retrieved web content as `untrusted_content=true`.
+- WEB retrieval semantics are explicitly separated from the internal RAG `evidence_status`; Evidence Engine semantics remain unchanged.
+- Runtime smoke tests confirmed successful Web Search and Web Fetch execution.
+- Gateway Web Search tests: 14 passed, 22 deselected; only the existing Starlette deprecation warning remains.
+
+### Still open
+
+- Web prompt-injection isolation.
+- Explicit web-search mode.
+- Internal-first / web-fallback mode.
+- Internal-only / offline mode.
+- Separate Web Evidence Evaluation layer above retrieval.
+- Authoritative current date, time and timezone context for the LLM.
+- Open WebUI upload → Document Ingestion production integration.
