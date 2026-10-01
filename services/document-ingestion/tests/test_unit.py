@@ -7,7 +7,7 @@ import pytest
 from app.security import sha256_bytes, validate_filename, validate_extension
 from app.extractors import extract_document, extract_text
 from app.chunker import chunk_document
-from app.models import DocumentMetadata, LifecycleStatus, NormalizedDocument
+from app.models import DocumentMetadata, DocumentProcessResponse, IngestResponse, DocumentStatus, LifecycleStatus, NormalizedDocument
 from app import pipeline
 
 
@@ -167,6 +167,33 @@ def test_docx_extraction():
     assert blocks[2].provenance["source_format"] == "docx"
 
 
+def test_stage_upload_preserves_original_extension(tmp_path, monkeypatch):
+    class FakeUpload:
+        filename = "test.xlsx"
+
+        def __init__(self, data):
+            self.data = io.BytesIO(data)
+
+        async def read(self, size):
+            return self.data.read(size)
+
+    monkeypatch.setattr(pipeline.settings, "staging_storage_path", str(tmp_path))
+    monkeypatch.setattr(pipeline.settings, "upload_chunk_size_bytes", 1024)
+    monkeypatch.setattr(pipeline.settings, "max_file_size_mb", 1)
+
+    payload = b"fake-xlsx-content"
+    staged_path, content_hash, total = asyncio.run(
+        pipeline._stage_upload(FakeUpload(payload))
+    )
+
+    assert staged_path.suffix == ".xlsx"
+    assert staged_path.name.startswith(".ingest-")
+    assert staged_path.read_bytes() == payload
+    assert total == len(payload)
+    assert content_hash == sha256_bytes(payload)
+
+    staged_path.unlink()
+
 def test_xlsx_extraction():
     from openpyxl import Workbook
 
@@ -284,6 +311,22 @@ def test_pipeline_repository_knowledge_critical_path(monkeypatch):
             calls.append(("lifecycle", document_id, version, lifecycle_status))
             return {"status": "ok"}
 
+    async def fake_create_ingestion_job(**kwargs):
+        return None
+
+    async def fake_update_ingestion_job(ingestion_id, **kwargs):
+        return None
+
+    async def fake_get_ingestion_job(ingestion_id):
+        return None
+
+    monkeypatch.setattr(pipeline, "create_ingestion_job", fake_create_ingestion_job)
+    monkeypatch.setattr(pipeline, "update_ingestion_job", fake_update_ingestion_job)
+    monkeypatch.setattr(pipeline, "get_ingestion_job", fake_get_ingestion_job)
+    async def fake_find_duplicate_version(**kwargs):
+        return None
+
+    monkeypatch.setattr(pipeline, "find_duplicate_version", fake_find_duplicate_version)
     monkeypatch.setattr(pipeline, "repository", FakeRepository())
     monkeypatch.setattr(pipeline, "KnowledgeEngineClient", FakeKnowledgeClient)
 
@@ -312,3 +355,193 @@ def test_pipeline_repository_knowledge_critical_path(monkeypatch):
         ("finalize", "critical-path-001", 1),
         ("lifecycle", "critical-path-001", 1, "CURRENT"),
     ]
+
+    document = asyncio.run(
+        pipeline.ingest_document(
+            filename="loader-path.txt",
+            data=b"Repository loader path",
+            document_id="loader-path-001",
+            return_document=True,
+        )
+    )
+
+    assert isinstance(document, DocumentProcessResponse)
+    assert document.ingestion_id
+    assert isinstance(document.document, NormalizedDocument)
+    assert document.document.document_id == "loader-path-001"
+    assert document.document.blocks[0].content == "Repository loader path"
+
+
+def test_duplicate_process_reconstructs_document_from_index(monkeypatch):
+    duplicate = type(
+        "Duplicate",
+        (),
+        {
+            "document_id": "existing-001",
+            "source_system": "upload",
+            "source_reference": None,
+            "source_file": "existing.txt",
+            "title": "Existing",
+            "author": "Author",
+            "classification": "INTERNAL",
+            "created_at": "2026-09-20T00:00:00+00:00",
+            "updated_at": "2026-09-20T00:00:00+00:00",
+            "tags": ["test"],
+            "language": "bg",
+            "version": 2,
+            "document_date": "2026-09-20",
+            "effective_from": "2026-09-20",
+            "effective_to": None,
+            "lifecycle_status": LifecycleStatus.CURRENT,
+            "parent_document_id": None,
+            "supersedes": "existing-001:v1",
+            "superseded_by": None,
+            "project_id": "project-001",
+            "access_scope": "INTERNAL",
+            "canonical_storage_key": None,
+            "content_hash": "same-hash",
+        },
+    )()
+
+    class FakeKnowledgeClient:
+        async def get_document_chunks(self, document_id, version):
+            assert document_id == "existing-001"
+            assert version == 2
+            return [
+                {
+                    "chunk_id": "existing-001:v2:chunk:00002",
+                    "chunk_type": "text",
+                    "content": "Втори блок.",
+                    "page": 2,
+                    "section": "Секция 2",
+                    "confidence": 0.91,
+                    "provenance": {"block_ids": ["block-2"]},
+                },
+                {
+                    "chunk_id": "existing-001:v2:chunk:00001",
+                    "chunk_type": "text",
+                    "content": "Първи блок.",
+                    "page": 1,
+                    "section": "Секция 1",
+                    "confidence": 0.97,
+                    "provenance": {"block_ids": ["block-1"]},
+                },
+            ]
+
+    async def fake_create_ingestion_job(**kwargs):
+        return None
+
+    async def fake_update_ingestion_job(ingestion_id, **kwargs):
+        return None
+
+    async def fake_find_duplicate_version(**kwargs):
+        return duplicate
+
+    monkeypatch.setattr(pipeline, "create_ingestion_job", fake_create_ingestion_job)
+    monkeypatch.setattr(pipeline, "update_ingestion_job", fake_update_ingestion_job)
+    monkeypatch.setattr(pipeline, "find_duplicate_version", fake_find_duplicate_version)
+    monkeypatch.setattr(pipeline, "KnowledgeEngineClient", FakeKnowledgeClient)
+
+    result = asyncio.run(
+        pipeline.ingest_document(
+            filename="incoming.txt",
+            data=b"same content",
+            document_id="new-request-001",
+            return_document=True,
+        )
+    )
+
+    assert isinstance(result, DocumentProcessResponse)
+    assert result.document.document_id == "existing-001"
+    assert result.document.metadata.version == 2
+    assert result.document.source_file == "existing.txt"
+    assert result.document.content_hash == "same-hash"
+    assert [block.content for block in result.document.blocks] == [
+        "Първи блок.",
+        "Втори блок.",
+    ]
+    assert result.document.blocks[0].provenance == {"block_ids": ["block-1"]}
+    assert result.document.blocks[1].confidence == 0.91
+
+    ingest_result = asyncio.run(
+        pipeline.ingest_document(
+            filename="incoming.txt",
+            data=b"same content",
+            document_id="new-request-002",
+        )
+    )
+
+    assert isinstance(ingest_result, IngestResponse)
+    assert ingest_result.document_id == "existing-001"
+    assert ingest_result.version == 2
+    assert ingest_result.status == DocumentStatus.READY
+    assert ingest_result.chunk_count == 2
+    assert ingest_result.indexed_count == 2
+    assert ingest_result.page_count is None
+    assert "DUPLICATE_CONTENT_REUSED" in ingest_result.warnings
+
+
+def test_vision_json_validation():
+    from app.vision import _extract_json, VisionError
+
+    result = _extract_json(
+        '{"page_type":"TEXT","title":null,"text":"Здравей","tables":[],'
+        '"key_values":[],"entities":[],"visual_elements":[],'
+        '"uncertain_items":[],"confidence":0.95}'
+    )
+
+    assert result["text"] == "Здравей"
+    assert result["confidence"] == 0.95
+
+
+def test_vision_rejects_invalid_json():
+    from app.vision import _extract_json, VisionError
+
+    with pytest.raises(VisionError, match="PDF_VISION_INVALID_JSON"):
+        _extract_json("това не е JSON")
+
+
+def test_vision_rejects_incomplete_schema():
+    from app.vision import _extract_json, VisionError
+
+    with pytest.raises(VisionError, match="PDF_VISION_INVALID_SCHEMA"):
+        _extract_json('{"page_type":"TEXT","text":"test"}')
+
+
+def test_vision_result_to_blocks_preserves_text_and_table():
+    from app.pipeline import _vision_result_to_blocks
+
+    blocks = _vision_result_to_blocks(
+        {
+            "_page": 3,
+            "page_type": "COMPLEX",
+            "title": "Отчет",
+            "text": "Обща стойност: 123.45 EUR",
+            "tables": [
+                {
+                    "headers": ["Артикул", "Количество"],
+                    "rows": [["Лаптоп", 5]],
+                }
+            ],
+            "key_values": [],
+            "entities": [],
+            "visual_elements": [],
+            "uncertain_items": ["Една стойност е нечетлива"],
+            "confidence": 0.91,
+        },
+        "scan.pdf",
+    )
+
+    assert len(blocks) == 2
+
+    table = next(block for block in blocks if block.block_type == "table")
+    text = next(block for block in blocks if block.block_type == "text")
+
+    assert table.page == 3
+    assert "Артикул | Количество" in table.content
+    assert "Лаптоп | 5" in table.content
+    assert text.content.startswith("Отчет")
+    assert "123.45 EUR" in text.content
+    assert text.confidence == 0.91
+    assert text.provenance["extraction"] == "qwen3_6_vision"
+    assert text.provenance["uncertain_items"] == ["Една стойност е нечетлива"]

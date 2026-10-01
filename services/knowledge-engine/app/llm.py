@@ -16,11 +16,28 @@ class LLMClient:
         except Exception:
             return False
 
-    async def chat(self, messages: list[dict], temperature: float = 0.0, max_tokens: int = 1024) -> str:
+    async def chat(
+        self,
+        messages: list[dict],
+        temperature: float = 0.0,
+        max_tokens: int = 1024,
+        response_format: dict | None = None,
+    ) -> str:
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if response_format is not None:
+            payload["response_format"] = response_format
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
-                json={"model": self.model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens},
+                json=payload,
             )
             response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        result = response.json()
+        content = result["choices"][0]["message"]["content"]
+        return content

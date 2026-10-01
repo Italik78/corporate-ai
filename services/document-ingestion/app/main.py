@@ -9,7 +9,7 @@ from .metadata import (
     initialize_metadata,
     list_versions,
 )
-from .models import StatusResponse
+from .models import DocumentProcessResponse, StatusResponse
 from .pipeline import get_job, ingest_document
 
 app = FastAPI(title="Corporate AI Document Ingestion Service", version=settings.version)
@@ -41,6 +41,7 @@ async def ingest(
     file: UploadFile = File(...),
     document_id: str | None = Form(default=None),
     source_system: str = Form(default="upload"),
+    source_reference: str | None = Form(default=None),
     version: int | None = Form(default=None),
     document_date: str | None = Form(default=None),
     effective_from: str | None = Form(default=None),
@@ -51,26 +52,67 @@ async def ingest(
     classification: str = Form(default="INTERNAL"),
     tags: str | None = Form(default=None),
 ):
-    data = await file.read()
     tag_values = [x.strip() for x in (tags or "").split(",") if x.strip()]
     result = await ingest_document(
-        file.filename or "",
-        data,
-        document_id,
-        source_system,
-        version,
-        document_date,
-        effective_from,
-        effective_to,
-        project_id,
-        access_scope,
-        author,
-        classification,
-        tag_values,
+        filename=file.filename or "",
+        data=None,
+        document_id=document_id,
+        source_system=source_system,
+        source_reference=source_reference,
+        version=version,
+        document_date=document_date,
+        effective_from=effective_from,
+        effective_to=effective_to,
+        project_id=project_id,
+        access_scope=access_scope,
+        author=author,
+        classification=classification,
+        tags=tag_values,
+        upload=file,
     )
     if result.status.value.startswith("FAILED"):
         raise HTTPException(status_code=422, detail=result.model_dump())
     return result
+
+
+@app.post("/v1/documents/process")
+async def process_document(
+    file: UploadFile = File(...),
+    document_id: str | None = Form(default=None),
+    source_system: str = Form(default="open-webui"),
+    source_reference: str | None = Form(default=None),
+    version: int | None = Form(default=None),
+    document_date: str | None = Form(default=None),
+    effective_from: str | None = Form(default=None),
+    effective_to: str | None = Form(default=None),
+    project_id: str | None = Form(default=None),
+    access_scope: str = Form(default="INTERNAL"),
+    author: str | None = Form(default=None),
+    classification: str = Form(default="INTERNAL"),
+    tags: str | None = Form(default=None),
+):
+    tag_values = [x.strip() for x in (tags or "").split(",") if x.strip()]
+    result = await ingest_document(
+        filename=file.filename or "",
+        data=None,
+        document_id=document_id,
+        source_system=source_system,
+        source_reference=source_reference,
+        version=version,
+        document_date=document_date,
+        effective_from=effective_from,
+        effective_to=effective_to,
+        project_id=project_id,
+        access_scope=access_scope,
+        author=author,
+        classification=classification,
+        tags=tag_values,
+        upload=file,
+        return_document=True,
+    )
+    if not isinstance(result, DocumentProcessResponse):
+        raise HTTPException(status_code=422, detail="DOCUMENT_PROCESSING_FAILED")
+    return result.model_dump()
 
 
 @app.post("/v1/integrations/paperless/webhook")
@@ -98,20 +140,21 @@ async def paperless_webhook(
     if not document_id:
         raise HTTPException(status_code=400, detail="PAPERLESS_DOCUMENT_ID_REQUIRED")
 
-    data = await file.read()
     tag_values = [x.strip() for x in (tags or "").split(",") if x.strip()]
 
     result = await ingest_document(
         filename=file.filename or "",
-        data=data,
+        data=None,
         document_id=f"paperless:{document_id}",
         source_system="paperless",
+        source_reference=f"paperless:{document_id}",
         version=None,
         document_date=document_date,
         access_scope=access_scope,
         author=author,
         classification=classification,
         tags=tag_values,
+        upload=file,
     )
 
     if result.status.value.startswith("FAILED"):
@@ -135,15 +178,15 @@ async def version_details(document_id: str, version: int):
 
 @app.get("/v1/documents/{ingestion_id}/status", response_model=StatusResponse)
 async def status(ingestion_id: str):
-    job = get_job(ingestion_id)
+    job = await get_job(ingestion_id)
     if not job:
         raise HTTPException(status_code=404, detail="INGEST_NOT_FOUND")
-    return StatusResponse(ingestion_id=ingestion_id, **job)
+    return StatusResponse(**job)
 
 
 @app.get("/v1/documents/{ingestion_id}")
 async def details(ingestion_id: str):
-    job = get_job(ingestion_id)
+    job = await get_job(ingestion_id)
     if not job:
         raise HTTPException(status_code=404, detail="INGEST_NOT_FOUND")
     return {"ingestion_id": ingestion_id, **job}

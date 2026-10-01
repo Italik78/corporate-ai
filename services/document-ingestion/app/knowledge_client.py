@@ -26,6 +26,7 @@ class KnowledgeEngineClient:
             "chunk_id": chunk.chunk_id,
             "section": chunk.section,
             "confidence": chunk.confidence,
+            "provenance": chunk.provenance,
         }
         async with httpx.AsyncClient(timeout=settings.ingest_timeout_seconds) as client:
             r = await client.post(f"{self.base_url}/v1/ingest", json=payload)
@@ -49,6 +50,20 @@ class KnowledgeEngineClient:
             )
             r.raise_for_status()
             return r.json()
+
+    async def get_document_chunks(
+        self,
+        document_id: str,
+        version: int,
+    ) -> list[dict]:
+        async with httpx.AsyncClient(timeout=settings.ingest_timeout_seconds) as client:
+            r = await client.get(
+                f"{self.base_url}/v1/documents/{document_id}/versions/{version}/chunks",
+            )
+            r.raise_for_status()
+            payload = r.json()
+            return payload.get("chunks", [])
+
 
     async def health(self) -> bool:
         try:

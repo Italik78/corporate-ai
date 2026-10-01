@@ -114,6 +114,7 @@ async def ingest(request: IngestRequest):
         "chunk_id": request.chunk_id,
         "section": request.section,
         "confidence": request.confidence,
+        "provenance": request.provenance,
         "content": content,
         "content_hash": hashlib.sha256(
             content.encode("utf-8")
@@ -162,6 +163,30 @@ async def update_document_lifecycle(
         raise HTTPException(
             status_code=502,
             detail={"component": "knowledge-engine", "error": str(exc)},
+        ) from exc
+
+
+@app.get("/v1/documents/{document_id}/versions/{version}/chunks")
+async def get_document_chunks(document_id: str, version: int):
+    if not document_id.strip():
+        raise HTTPException(status_code=400, detail="DOCUMENT_ID_REQUIRED")
+    if version < 1:
+        raise HTTPException(status_code=400, detail="INVALID_VERSION")
+
+    try:
+        chunks = qdrant.get_document_chunks(
+            document_id=document_id,
+            version=version,
+        )
+        return {
+            "document_id": document_id,
+            "version": version,
+            "chunks": chunks,
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"component": "qdrant", "error": str(exc)},
         ) from exc
 
 
@@ -311,7 +336,8 @@ async def query(request: RAGQuery):
         llm_content = await llm.chat(
             messages=messages,
             temperature=0.0,
-            max_tokens=1024,
+            max_tokens=8192,
+            response_format={"type": "json_object"},
         )
         decision = parse_decision(llm_content)
 

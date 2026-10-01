@@ -20,3 +20,12 @@ open-webui.inspect.backup-*.json
 
 # Local source backups
 services/knowledge-engine/**/*.pre-*
+
+# Local secrets
+.env
+
+# Local Python environments
+.venv/
+
+# Local model/container backups
+qwen36-container-backup-*.json

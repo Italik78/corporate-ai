@@ -45,6 +45,15 @@ class Repository(Protocol):
         content_hash: str,
     ) -> str: ...
 
+    async def store_canonical_source_file(
+        self,
+        document_id: str,
+        version: int,
+        filename: str,
+        source_path: str,
+        content_hash: str,
+    ) -> str: ...
+
     async def set_canonical_storage_key(
         self, document_id: str, version: int, canonical_storage_key: str
     ) -> None: ...
@@ -113,6 +122,25 @@ class PostgresRepository:
                 version=version,
                 filename=filename,
                 data=data,
+                content_hash=content_hash,
+            )
+        except CanonicalStorageError as exc:
+            raise RepositoryError(str(exc)) from exc
+
+    async def store_canonical_source_file(
+        self,
+        document_id: str,
+        version: int,
+        filename: str,
+        source_path: str,
+        content_hash: str,
+    ) -> str:
+        try:
+            return self.storage.store_file(
+                document_id=document_id,
+                version=version,
+                filename=filename,
+                source_path=source_path,
                 content_hash=content_hash,
             )
         except CanonicalStorageError as exc:

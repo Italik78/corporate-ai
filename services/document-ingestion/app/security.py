@@ -17,6 +17,35 @@ def validate_extension(filename: str, allowed: set[str]) -> str:
         raise ValueError("UNSUPPORTED_FILE_TYPE")
     return suffix
 
+def sha256_file(path, chunk_size: int = 1024 * 1024) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        while chunk := handle.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def validate_file_size(path, max_bytes: int, chunk_size: int = 1024 * 1024) -> int:
+    import os
+
+    size = os.path.getsize(path)
+    if size > max_bytes:
+        raise ValueError("FILE_TOO_LARGE")
+    return size
+
+
+def security_scan_file(path, suffix: str, chunk_size: int = 1024 * 1024) -> list[str]:
+    warnings: list[str] = []
+    if suffix in {".txt", ".md", ".markdown", ".csv"}:
+        with open(path, "rb") as handle:
+            while chunk := handle.read(chunk_size):
+                if b"\x00" in chunk:
+                    raise ValueError("MALFORMED_TEXT_FILE")
+    return warnings
+
+
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 

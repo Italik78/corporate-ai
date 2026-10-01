@@ -32,7 +32,8 @@ services:
       INGESTION_KNOWLEDGE_ENGINE_URL: "http://corporate-ai-knowledge-engine-0.3.1-test:8090"
       INGESTION_METADATA_DATABASE_URL: "postgresql://corporate_ai:corporate_ai@corporate-ai-postgres:5432/corporate_ai"
       INGESTION_REPOSITORY_STORAGE_PATH: "/data/repository"
-      INGESTION_MAX_FILE_SIZE_MB: "25"
+      INGESTION_STAGING_STORAGE_PATH: "/data/incoming"
+      INGESTION_MAX_FILE_SIZE_MB: "1024"
       INGESTION_PAPERLESS_WEBHOOK_SECRET: "${PAPERLESS_WEBHOOK_SECRET}"
     ports:
       - "127.0.0.1:8095:8095"
@@ -44,13 +45,45 @@ services:
       - ALL
     read_only: true
     tmpfs:
-      - /tmp:size=64m,noexec,nosuid,nodev
+      - /tmp:size=512m,noexec,nosuid,nodev
     volumes:
       - corporate_ai_document_repository:/data/repository
+      - corporate_ai_document_staging:/data/incoming
+
+
+  nextcloud-poller:
+    build:
+      context: ../../services/nextcloud-poller
+    container_name: corporate-ai-nextcloud-poller
+    restart: unless-stopped
+    depends_on:
+      document-ingestion:
+        condition: service_started
+    environment:
+      NEXTCLOUD_BASE_URL: "https://zlacloud.synology.me"
+      NEXTCLOUD_USERNAME: "${NEXTCLOUD_USERNAME}"
+      NEXTCLOUD_PASSWORD: "${NEXTCLOUD_PASSWORD}"
+      NEXTCLOUD_INCOMING_PATH: "Corporate AI/Incoming"
+      INGESTION_URL: "http://corporate-ai-document-ingestion:8095"
+      POLL_INTERVAL_SECONDS: "300"
+      STATE_FILE: "/data/state/nextcloud-poller-state.json"
+    networks:
+      - ai-net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    volumes:
+      - corporate_ai_nextcloud_poller_state:/data/state
 
 volumes:
   corporate_ai_postgres_data:
   corporate_ai_document_repository:
+  corporate_ai_document_staging:
+  corporate_ai_nextcloud_poller_state:
 
 networks:
   ai-net:

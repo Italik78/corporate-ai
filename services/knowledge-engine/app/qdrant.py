@@ -41,6 +41,47 @@ class QdrantStore:
             wait=True,
         )
 
+    def get_document_chunks(
+        self,
+        document_id: str,
+        version: int,
+    ) -> list[dict[str, Any]]:
+        chunks: list[dict[str, Any]] = []
+        offset = None
+
+        while True:
+            points, next_offset = self.client.scroll(
+                collection_name=self.collection,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="document_id",
+                            match=MatchValue(value=document_id),
+                        ),
+                        FieldCondition(
+                            key="version",
+                            match=MatchValue(value=version),
+                        ),
+                    ]
+                ),
+                with_payload=True,
+                limit=1000,
+                offset=offset,
+            )
+
+            chunks.extend(
+                point.payload
+                for point in points
+                if point.payload
+            )
+
+            if next_offset is None:
+                break
+
+            offset = next_offset
+
+        return chunks
+
     def search(
         self,
         vector: list[float],

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS document_versions (
     source_file TEXT NOT NULL,
     content_hash TEXT NOT NULL,
     source_system TEXT NOT NULL,
+    source_reference TEXT,
     title TEXT NOT NULL,
     author TEXT,
     classification TEXT NOT NULL,
@@ -44,11 +45,33 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_document_versions_current
 CREATE INDEX IF NOT EXISTS ix_document_versions_hash
     ON document_versions(content_hash);
 
+CREATE UNIQUE INDEX IF NOT EXISTS ux_document_versions_content_scope
+    ON document_versions(content_hash, project_id, access_scope)
+    NULLS NOT DISTINCT;
+
 CREATE INDEX IF NOT EXISTS ix_document_versions_project
     ON document_versions(project_id);
 
 CREATE INDEX IF NOT EXISTS ix_document_versions_effective
     ON document_versions(document_id, effective_from, effective_to);
+
+CREATE TABLE IF NOT EXISTS ingestion_jobs (
+    ingestion_id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK (version > 0),
+    status TEXT NOT NULL,
+    lifecycle_status TEXT,
+    error_code TEXT,
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_ingestion_jobs_document
+    ON ingestion_jobs(document_id);
+
+CREATE INDEX IF NOT EXISTS ix_ingestion_jobs_updated
+    ON ingestion_jobs(updated_at);
 """
 
 
@@ -73,6 +96,98 @@ async def initialize_metadata() -> None:
         await conn.execute(
             "ALTER TABLE document_versions ADD COLUMN IF NOT EXISTS canonical_storage_key TEXT"
         )
+        await conn.execute(
+            "ALTER TABLE document_versions ADD COLUMN IF NOT EXISTS source_reference TEXT"
+        )
+
+
+async def create_ingestion_job(
+    ingestion_id: str,
+    document_id: str,
+    version: int,
+    status: str,
+) -> None:
+    async with await psycopg.AsyncConnection.connect(settings.metadata_database_url) as conn:
+        async with conn.transaction():
+            await conn.execute(
+                """
+                INSERT INTO ingestion_jobs (
+                    ingestion_id,
+                    document_id,
+                    version,
+                    status,
+                    created_at,
+                    updated_at
+                )
+                VALUES (%s, %s, %s, %s, NOW(), NOW())
+                """,
+                (ingestion_id, document_id, version, status),
+            )
+
+
+async def update_ingestion_job(
+    ingestion_id: str,
+    *,
+    document_id: str | None = None,
+    version: int | None = None,
+    status: str | None = None,
+    lifecycle_status: str | None = None,
+    error_code: str | None = None,
+    error: str | None = None,
+) -> None:
+    fields = []
+    values = []
+
+    for name, value in (
+        ("document_id", document_id),
+        ("version", version),
+        ("status", status),
+        ("lifecycle_status", lifecycle_status),
+        ("error_code", error_code),
+        ("error", error),
+    ):
+        if value is not None:
+            fields.append(f"{name} = %s")
+            values.append(value)
+
+    fields.append("updated_at = NOW()")
+    values.append(ingestion_id)
+
+    async with await psycopg.AsyncConnection.connect(settings.metadata_database_url) as conn:
+        async with conn.transaction():
+            await conn.execute(
+                f"""
+                UPDATE ingestion_jobs
+                SET {", ".join(fields)}
+                WHERE ingestion_id = %s
+                """,
+                values,
+            )
+
+
+async def get_ingestion_job(ingestion_id: str) -> dict[str, Any] | None:
+    async with await psycopg.AsyncConnection.connect(
+        settings.metadata_database_url, row_factory=dict_row
+    ) as conn:
+        cur = await conn.execute(
+            """
+            SELECT
+                ingestion_id,
+                document_id,
+                version,
+                status,
+                lifecycle_status,
+                error_code,
+                error,
+                created_at,
+                updated_at
+            FROM ingestion_jobs
+            WHERE ingestion_id = %s
+            """,
+            (ingestion_id,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
 
 
 async def health() -> bool:
@@ -92,6 +207,7 @@ def _row_to_model(row: dict[str, Any]) -> DocumentVersionResponse:
         content_hash=row["content_hash"],
         canonical_storage_key=row["canonical_storage_key"],
         source_system=row["source_system"],
+        source_reference=row["source_reference"],
         title=row["title"],
         author=row["author"],
         classification=row["classification"],
@@ -108,6 +224,58 @@ def _row_to_model(row: dict[str, Any]) -> DocumentVersionResponse:
         created_at=row["created_at"].isoformat(),
         updated_at=row["updated_at"].isoformat(),
     )
+
+
+async def find_duplicate_version(
+    content_hash: str,
+    project_id: str | None,
+    access_scope: str,
+) -> DocumentVersionResponse | None:
+    async with await psycopg.AsyncConnection.connect(
+        settings.metadata_database_url, row_factory=dict_row
+    ) as conn:
+        cur = await conn.execute(
+            """
+            SELECT *
+            FROM document_versions
+            WHERE content_hash = %s
+              AND access_scope = %s
+              AND project_id IS NOT DISTINCT FROM %s
+            ORDER BY
+                CASE lifecycle_status
+                    WHEN 'CURRENT' THEN 0
+                    WHEN 'INGESTING' THEN 1
+                    ELSE 2
+                END,
+                version DESC
+            LIMIT 1
+            """,
+            (content_hash, access_scope, project_id),
+        )
+        row = await cur.fetchone()
+        return _row_to_model(row) if row else None
+
+
+async def find_document_by_source_reference(
+    source_system: str,
+    source_reference: str,
+) -> str | None:
+    async with await psycopg.AsyncConnection.connect(
+        settings.metadata_database_url, row_factory=dict_row
+    ) as conn:
+        cur = await conn.execute(
+            """
+            SELECT document_id
+            FROM document_versions
+            WHERE source_system = %s
+              AND source_reference = %s
+              AND lifecycle_status = 'CURRENT'
+            LIMIT 1
+            """,
+            (source_system, source_reference),
+        )
+        row = await cur.fetchone()
+        return row["document_id"] if row else None
 
 
 async def register_version(
@@ -174,14 +342,14 @@ async def register_version(
                 """
                 INSERT INTO document_versions (
                     document_id, version, source_file, content_hash,
-                    source_system, title, author, classification, language,
+                    source_system, source_reference, title, author, classification, language,
                     tags, document_date, effective_from, effective_to,
                     lifecycle_status, parent_document_id, supersedes,
                     superseded_by, project_id, access_scope,
                     canonical_storage_key, created_at, updated_at
                 )
                 VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s::jsonb, %s, %s, %s, 'INGESTING', %s, %s,
                     NULL, %s, %s, NULL, %s, %s
                 )
@@ -192,6 +360,7 @@ async def register_version(
                     source_file,
                     content_hash,
                     metadata.source_system,
+                    metadata.source_reference,
                     metadata.title,
                     metadata.author,
                     metadata.classification,

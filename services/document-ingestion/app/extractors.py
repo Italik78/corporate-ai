@@ -17,7 +17,7 @@ from .models import NormalizedBlock
 
 
 TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
-SUPPORTED_SUFFIXES = TEXT_SUFFIXES | {".docx", ".xlsx", ".pptx", ".csv", ".pdf"}
+SUPPORTED_SUFFIXES = TEXT_SUFFIXES | {".docx", ".xls", ".xlsx", ".pptx", ".csv", ".pdf"}
 
 
 def extract_text(filename: str, data: bytes) -> list[NormalizedBlock]:
@@ -40,12 +40,187 @@ def extract_document(filename: str, data: bytes) -> list[NormalizedBlock]:
         return _extract_pdf(filename, data)
     if suffix == ".docx":
         return _extract_docx(filename, data)
+    if suffix == ".xls":
+        return _extract_xls(filename, data)
     if suffix == ".xlsx":
         return _extract_xlsx(filename, data)
     if suffix == ".pptx":
         return _extract_pptx(filename, data)
 
     raise ValueError("UNSUPPORTED_FILE_TYPE")
+
+
+def extract_document_from_path(filename: str, source_path: str | Path) -> list[NormalizedBlock]:
+    """Extract a document directly from a staging file.
+
+    This path-based entry point avoids loading the complete uploaded object
+    into RAM. The legacy bytes-based extract_document() remains available for
+    unit tests and small in-memory callers.
+    """
+    path = Path(source_path)
+    suffix = Path(filename).suffix.lower()
+
+    if suffix in TEXT_SUFFIXES:
+        return _extract_plain_text_path(filename, path)
+    if suffix == ".csv":
+        return _extract_csv_path(filename, path)
+    if suffix == ".pdf":
+        return _extract_pdf_path(filename, path)
+    if suffix == ".docx":
+        return _extract_docx_path(filename, path)
+    if suffix == ".xls":
+        return _extract_xls_path(filename, path)
+    if suffix == ".xlsx":
+        return _extract_xlsx_path(filename, path)
+    if suffix == ".pptx":
+        return _extract_pptx_path(filename, path)
+
+    raise ValueError("UNSUPPORTED_FILE_TYPE")
+
+
+def _extract_plain_text_path(filename: str, path: Path) -> list[NormalizedBlock]:
+    suffix = Path(filename).suffix.lower()
+    blocks: list[NormalizedBlock] = []
+    section: str | None = None
+    counter = 0
+
+    try:
+        with path.open("r", encoding="utf-8-sig", errors="replace") as handle:
+            for line_no, raw in enumerate(handle, start=1):
+                line = raw.strip()
+                if not line:
+                    continue
+
+                if suffix in {".md", ".markdown"} and line.startswith("#"):
+                    section = line.lstrip("#").strip()
+                    counter += 1
+                    blocks.append(
+                        NormalizedBlock(
+                            block_id=f"b-{counter:06d}",
+                            block_type="heading",
+                            content=section,
+                            section=section,
+                            provenance={"line": line_no, "source_format": "markdown"},
+                        )
+                    )
+                    continue
+
+                counter += 1
+                blocks.append(
+                    NormalizedBlock(
+                        block_id=f"b-{counter:06d}",
+                        content=line,
+                        section=section,
+                        provenance={"line": line_no, "source_format": "text"},
+                    )
+                )
+    except UnicodeError as exc:
+        raise ValueError("TEXT_PARSE_ERROR") from exc
+
+    return blocks
+
+
+def _extract_csv_path(filename: str, path: Path) -> list[NormalizedBlock]:
+    try:
+        with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
+            sample = handle.read(8192)
+            handle.seek(0)
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+            except csv.Error:
+                dialect = csv.excel
+
+            reader = csv.reader(handle, dialect)
+            rows = [[_clean_cell(cell) for cell in row] for row in reader]
+    except OSError as exc:
+        raise ValueError("CSV_PARSE_ERROR") from exc
+
+    rows = [row for row in rows if any(cell for cell in row)]
+    if not rows:
+        return []
+
+    headers = rows[0]
+    body = rows[1:]
+    width = max(len(row) for row in rows)
+    headers = headers + [""] * (width - len(headers))
+    normalized_rows = [row + [""] * (width - len(row)) for row in body]
+
+    return [
+        NormalizedBlock(
+            block_id="csv-table-000001",
+            block_type="table",
+            content=_table_content(headers, normalized_rows),
+            section=Path(filename).stem,
+            provenance={
+                "source_format": "csv",
+                "row_count": len(normalized_rows),
+                "column_count": width,
+                "header": headers,
+            },
+        )
+    ]
+
+
+def _extract_pdf_path(filename: str, path: Path) -> list[NormalizedBlock]:
+    import fitz
+
+    try:
+        document = fitz.open(str(path))
+    except Exception as exc:
+        raise ValueError("PDF_PARSE_ERROR") from exc
+
+    blocks: list[NormalizedBlock] = []
+    try:
+        for page_index, page in enumerate(document, start=1):
+            page_blocks = page.get_text("blocks", sort=True)
+            text_block_index = 0
+            for block in page_blocks:
+                if len(block) < 5:
+                    continue
+                text = str(block[4]).strip()
+                if not text:
+                    continue
+                text_block_index += 1
+                blocks.append(
+                    NormalizedBlock(
+                        block_id=f"pdf-p{page_index:04d}-b{text_block_index:04d}",
+                        block_type="text",
+                        content=text,
+                        page=page_index,
+                        confidence=1.0,
+                        provenance={
+                            "source_format": "pdf",
+                            "page": page_index,
+                            "block_index": text_block_index,
+                            "bbox": [
+                                float(block[0]), float(block[1]),
+                                float(block[2]), float(block[3]),
+                            ],
+                            "extraction": "pymupdf_text",
+                        },
+                    )
+                )
+    except Exception as exc:
+        raise ValueError("PDF_EXTRACT_ERROR") from exc
+    finally:
+        document.close()
+    return blocks
+
+
+def _extract_docx_path(filename: str, path: Path) -> list[NormalizedBlock]:
+    return _extract_docx(filename, path)
+
+
+def _extract_xls_path(filename: str, path: Path) -> list[NormalizedBlock]:
+    return _extract_xls(filename, path)
+
+
+def _extract_xlsx_path(filename: str, path: Path) -> list[NormalizedBlock]:
+    return _extract_xlsx(filename, path)
+
+
+def _extract_pptx_path(filename: str, path: Path) -> list[NormalizedBlock]:
+    return _extract_pptx(filename, path)
 
 
 def _extract_pdf(filename: str, data: bytes) -> list[NormalizedBlock]:
@@ -233,7 +408,7 @@ def _extract_docx(filename: str, data: bytes) -> list[NormalizedBlock]:
     from docx.oxml.text.paragraph import CT_P
 
     try:
-        document = Document(io.BytesIO(data))
+        document = Document(data if isinstance(data, (str, Path)) else io.BytesIO(data))
     except Exception as exc:
         raise ValueError("DOCX_PARSE_ERROR") from exc
 
@@ -312,12 +487,61 @@ def _extract_docx(filename: str, data: bytes) -> list[NormalizedBlock]:
     return blocks
 
 
+def _extract_xls(filename: str, data: bytes | str | Path) -> list[NormalizedBlock]:
+    import xlrd
+
+    try:
+        workbook = xlrd.open_workbook(
+            file_contents=data if isinstance(data, bytes) else None,
+            filename=str(data) if isinstance(data, (str, Path)) else None,
+        )
+    except Exception as exc:
+        raise ValueError("XLS_PARSE_ERROR") from exc
+
+    blocks: list[NormalizedBlock] = []
+    for sheet_index in range(workbook.nsheets):
+        worksheet = workbook.sheet_by_index(sheet_index)
+        rows: list[list[str]] = []
+
+        for row_index in range(worksheet.nrows):
+            values = [_clean_cell(worksheet.cell_value(row_index, col_index))
+                      for col_index in range(worksheet.ncols)]
+            if any(values):
+                rows.append(values)
+
+        if not rows:
+            continue
+
+        width = max(len(row) for row in rows)
+        headers = rows[0] + [""] * (width - len(rows[0]))
+        normalized_rows = [row + [""] * (width - len(row)) for row in rows[1:]]
+
+        blocks.append(
+            NormalizedBlock(
+                block_id=f"xls-{sheet_index + 1:04d}-table-000001",
+                block_type="table",
+                content=_table_content(headers, normalized_rows),
+                section=worksheet.name,
+                provenance={
+                    "source_format": "xls",
+                    "sheet": worksheet.name,
+                    "sheet_index": sheet_index + 1,
+                    "row_count": len(normalized_rows),
+                    "column_count": width,
+                    "header": headers,
+                },
+            )
+        )
+
+    return blocks
+
+
 def _extract_xlsx(filename: str, data: bytes) -> list[NormalizedBlock]:
     from openpyxl import load_workbook
 
     try:
         workbook = load_workbook(
-            io.BytesIO(data),
+            data if isinstance(data, (str, Path)) else io.BytesIO(data),
             read_only=True,
             data_only=False,
         )
@@ -365,7 +589,7 @@ def _extract_pptx(filename: str, data: bytes) -> list[NormalizedBlock]:
     from pptx.enum.shapes import MSO_SHAPE_TYPE
 
     try:
-        presentation = Presentation(io.BytesIO(data))
+        presentation = Presentation(data if isinstance(data, (str, Path)) else io.BytesIO(data))
     except Exception as exc:
         raise ValueError("PPTX_PARSE_ERROR") from exc
 

@@ -86,6 +86,49 @@ class FilesystemCanonicalStorage:
 
         return str(path.relative_to(self.root))
 
+    def store_file(
+        self,
+        document_id: str,
+        version: int,
+        filename: str,
+        source_path: str | Path,
+        content_hash: str,
+        chunk_size: int = 1024 * 1024,
+    ) -> str:
+        source = Path(source_path).resolve()
+        if not source.is_file():
+            raise CanonicalStorageError("SOURCE_FILE_NOT_FOUND")
+
+        expected_hash = content_hash.removeprefix("sha256:")
+        digest = hashlib.sha256()
+        path = self._source_path(document_id, version, filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        try:
+            with source.open("rb") as src, temporary.open("wb") as dst:
+                while chunk := src.read(chunk_size):
+                    digest.update(chunk)
+                    dst.write(chunk)
+                dst.flush()
+                os.fsync(dst.fileno())
+
+            if digest.hexdigest() != expected_hash:
+                temporary.unlink(missing_ok=True)
+                raise CanonicalStorageError("CONTENT_HASH_MISMATCH")
+
+            os.replace(temporary, path)
+        except CanonicalStorageError:
+            raise
+        except OSError as exc:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise CanonicalStorageError("CANONICAL_STORAGE_WRITE_FAILED") from exc
+
+        return str(path.relative_to(self.root))
+
     def read(self, document_id: str, version: int, filename: str) -> bytes:
         path = self._source_path(document_id, version, filename)
         try:

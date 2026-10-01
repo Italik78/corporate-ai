@@ -31,6 +31,7 @@ class LifecycleStatus(str, Enum):
 class DocumentMetadata(BaseModel):
     document_id: str
     source_system: str = "upload"
+    source_reference: str | None = None
     title: str
     author: str | None = None
     classification: str = "INTERNAL"
@@ -70,6 +71,11 @@ class NormalizedDocument(BaseModel):
     blocks: list[NormalizedBlock]
 
 
+class DocumentProcessResponse(BaseModel):
+    ingestion_id: str
+    document: NormalizedDocument
+
+
 class Chunk(BaseModel):
     chunk_id: str
     document_id: str
@@ -99,6 +105,7 @@ class IngestResponse(BaseModel):
     content_hash: str
     chunk_count: int
     indexed_count: int
+    page_count: int | None = None
     warnings: list[str] = Field(default_factory=list)
     error_code: str | None = None
     error: str | None = None
@@ -119,6 +126,7 @@ class DocumentVersionResponse(BaseModel):
     content_hash: str
     canonical_storage_key: str | None = None
     source_system: str
+    source_reference: str | None = None
     title: str
     author: str | None = None
     classification: str
