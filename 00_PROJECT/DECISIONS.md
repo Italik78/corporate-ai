@@ -36,13 +36,6 @@
 29. A self-hosted SearXNG deployment is the first candidate for controlled web search; a hosted search provider remains an alternative if quality/reliability requires it.
 30. Documentation and plans are not implementation: Open WebUI integration and Web Search become complete only after DGX runtime validation.
 
-## 2026-09-21 — Validated Document Ingestion / Paperless path
-
-38. Document Ingestion Service 0.3.0 is the normalized ingestion boundary for TXT, Markdown, CSV, DOCX, XLSX, PPTX and PDF.
-39. Paperless-ngx integrates through the dedicated webhook boundary; Tika 3.3.1 and Gotenberg are the validated extraction/conversion components.
-40. Real Paperless → Document Ingestion → Qdrant/Knowledge Engine flows are validated for TXT, DOCX and XLSX, with provenance preserved.
-41. A Paperless webhook timeout was observed after successful XLSX processing; this is tracked as a non-blocking timeout/acknowledgement hardening item.
-
 ## 2026-09-20 — Corporate Information System direction
 
 31. The product target is a **Corporate Information System**. Open WebUI is the primary user workspace, not merely a chat frontend.
@@ -53,22 +46,38 @@
 36. Document understanding is a first-class capability: preserve document structure, tables, pages, sections, versions, relationships and provenance instead of reducing documents to anonymous text chunks.
 37. The implementation process is command-by-command on the DGX with real runtime validation. Each milestone is marked complete only after technical acceptance.
 
+## 2026-09-21 — Validated Document Ingestion / Paperless path
+
+38. Document Ingestion Service 0.3.0 is the normalized ingestion boundary for TXT, Markdown, CSV, DOCX, XLSX, PPTX and PDF.
+39. Paperless-ngx integrates through the dedicated webhook boundary; Tika 3.3.1 and Gotenberg are the validated extraction/conversion components.
+40. Real Paperless → Document Ingestion → Qdrant/Knowledge Engine flows are validated for TXT, DOCX and XLSX, with provenance preserved.
+41. A Paperless webhook timeout was observed after successful XLSX processing; this is tracked as a non-blocking timeout/acknowledgement hardening item.
+
 ## 2026-09-28 — Universal Document Ingestion / Production Entry Point
 
 42. Document Ingestion Service 0.3.0 is the authoritative production entry point for document ingestion. The primary API is `/v1/documents/ingest`; `/v1/documents/process` is the explicit normalized-document return path.
-
 43. Document ingestion must preserve `source_system` and optional `source_reference` from the entry point through PostgreSQL document-version metadata and reconstructed document responses. Source provenance must not be inferred later from filename or content.
-
 44. Duplicate detection is performed using SHA-256 content hash together with the applicable access/project scope. A duplicate request must not create a new document version. When document content is requested through the process path, the existing normalized document is reconstructed from indexed chunks and persisted metadata.
-
 45. The ingestion pipeline must register the document version before canonical source storage and Knowledge Engine indexing, then finalize the lifecycle state only after successful indexing.
-
 46. Canonical original storage is part of the ingestion critical path. The original file is stored outside Qdrant and the resulting `canonical_storage_key` is persisted in document-version metadata.
-
 47. Document Ingestion exposes a dedicated Paperless webhook boundary. Paperless-origin documents use `source_system="paperless"` and a stable `document_id` namespace derived from the Paperless document ID.
-
 48. Metadata fields including tags, source reference, document dates, effective dates, project ID, access scope, classification and lifecycle state must survive the complete ingestion path and remain available to downstream retrieval and document reconstruction.
-
 49. The Document Ingestion unit suite and real DGX smoke test are acceptance evidence for the implemented ingestion path. The current validated unit suite contains 38 passing tests. Open WebUI upload integration remains a separate pending acceptance item.
-
 50. A successful ingestion is not considered complete merely because extraction succeeds. Technical acceptance requires metadata registration, canonical source persistence, Knowledge Engine indexing and final `CURRENT` lifecycle state.
+
+## 2026-09-28 — Nextcloud poller E2E versioning validation
+
+51. Nextcloud polling is validated end-to-end against Document Ingestion: a changed file at the same source reference reuses the same logical `document_id` and creates the next document version.
+52. The validated Nextcloud flow uses ETag change detection, downloads the changed file, submits it through `/v1/documents/ingest`, and preserves `source_system="nextcloud"` plus the source path as `source_reference`.
+53. Version lifecycle transitions are validated on the DGX runtime: the previous version becomes `SUPERSEDED`, the new version becomes `CURRENT`, and `supersedes` / `superseded_by` relationships are persisted.
+54. Persistent Nextcloud poller state across container restart remains a separate hardening task; the current state file is ephemeral and is not yet accepted as production-durable state.
+
+## 2026-09-30 — Vision, staging and UI decisions
+
+55. PDF Vision structured-output calls use JSON response mode (`response_format={"type":"json_object"}`) with `max_tokens=4096`. This is a stability measure for scanned/complex PDF pages and was validated against an 87-page scanned PDF component test with 87/87 valid page results.
+56. The successful PDF Vision component test is not by itself production E2E acceptance. The real `/v1/documents/process` path must be completed and its persisted READY/CURRENT state verified before marking the scanned-PDF E2E requirement complete.
+57. Document Ingestion uses a 512 MB `/tmp` tmpfs because multipart upload staging can require more than the previous 64 MB boundary. This is a bounded runtime fix, not a change to the canonical storage architecture.
+58. `page_count` is part of the successful `IngestResponse` contract for PDF processing so callers can populate operational UI metadata without changing the persistent document-version schema.
+59. Nextcloud MetaVox is the current display-layer mechanism for showing Corporate AI processing state in the Nextcloud file list. It does not replace Corporate AI as the authoritative metadata, ingestion or retrieval system.
+60. The current Corporate AI file-list display fields are status, version, pages, chunks, indexed count and RAG-ready state. These are operational presentation metadata and must be sourced from the authoritative ingestion result rather than independently computed by Nextcloud.
+61. The monitoring route is `/v1/documents/{ingestion_id}/status`; `/v1/documents/status` does not exist and a 404 from that path is expected. The active E2E request must not be interrupted because of that monitoring mistake.

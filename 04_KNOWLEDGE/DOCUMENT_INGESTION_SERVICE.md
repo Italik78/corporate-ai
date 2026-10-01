@@ -45,8 +45,16 @@ MinIO не се разгръща на DGX Spark като production object store
 - `media_type`
 - `content_hash`
 - `source_system`
+- `source_reference` при наличие на producer-side identity/reference
 - optional access context
 - optional caller/user metadata
+
+`source_system` и `source_reference` имат различни роли:
+
+- `source_system` идентифицира системата или интеграцията, от която идва документът;
+- `source_reference` идентифицира документа в тази система.
+
+Paperless използва namespace `paperless:{document_id}` за `document_id`, а `source_system` остава `paperless`.
 
 Поддържани целеви формати:
 
@@ -58,6 +66,54 @@ MinIO не се разгръща на DGX Spark като production object store
 - TXT
 - Markdown
 - PNG / JPEG / TIFF
+
+## Production-oriented entry points
+
+### POST /v1/documents/ingest
+
+Основен multipart upload entry point. Приема файл и metadata полета и стартира единния ingestion pipeline.
+
+### POST /v1/documents/process
+
+Document-processing entry point със същия pipeline, който при успех връща `DocumentProcessResponse` с нормализирания документ.
+
+### POST /v1/integrations/paperless/webhook
+
+Контролиран Paperless boundary. Изисква configured webhook secret и приема producer-side Paperless document identity.
+
+### GET /v1/documents/{document_id}/versions
+
+Връща регистрираните версии на документ.
+
+### GET /v1/documents/{document_id}/versions/{version}
+
+Връща конкретна версия и нейния metadata/lifecycle state.
+
+### GET /v1/documents/{ingestion_id}/status
+
+Връща persistent ingestion job status.
+
+### GET /v1/documents/{ingestion_id}
+
+Връща ingestion job details.
+
+## Persistent job model
+
+Всеки ingest request получава `ingestion_id` и persistent job record в PostgreSQL.
+
+Job metadata включва:
+
+- `ingestion_id`
+- `document_id`
+- `version`
+- `status`
+- `lifecycle_status`
+- `error_code`
+- `error`
+- `created_at`
+- `updated_at`
+
+Това отделя processing state от HTTP request lifetime и позволява deterministic status reporting.
 
 ## Processing stages
 
@@ -155,6 +211,10 @@ Document
 - `created_at`
 - `updated_at`
 
+Source identity:
+
+- `source_reference`
+
 Access metadata:
 
 - `allowed_groups`
@@ -167,6 +227,11 @@ Access metadata:
 - `version`
 - `status`
 - `parent_document_id`
+- `project_id`
+- `access_scope`
+- `document_date`
+- `effective_from`
+- `effective_to`
 
 ### 7. Deduplication and versioning
 
@@ -174,7 +239,7 @@ Content hash: SHA-256.
 
 Правила:
 
-- същият hash → duplicate/no-op
+- същият hash в същия access/project scope → duplicate/no-op
 - нов hash със същия logical document → нова версия
 - `source_system` + `source_reference` могат да идентифицират същия logical document при външен source
 - `source_reference` е provenance идентификатор и не се използва като content hash
@@ -182,6 +247,8 @@ Content hash: SHA-256.
 - нова версия запазва връзката чрез `supersedes` / `superseded_by`
 - reindex не променя оригиналния файл
 - deletion/deprecation се извършва чрез lifecycle state
+
+При duplicate processing документът не се индексира повторно. Когато caller поиска нормализирания документ, pipeline реконструира blocks от authoritative indexed chunks и възстановява metadata/provenance.
 
 ### 8. Chunking
 
@@ -220,7 +287,24 @@ Knowledge Engine извършва:
 - Qdrant upsert
 - retrieval index preparation
 
-### 10. Object Storage
+### 10. Repository and canonical source
+
+Document Ingestion не заобикаля Repository boundary.
+
+Преди indexing pipeline:
+
+1. регистрира document version;
+2. извършва duplicate/version checks;
+3. пази canonical source;
+4. записва `canonical_storage_key`;
+5. индексира normalized chunks;
+6. финализира lifecycle state.
+
+При успех документът достига `READY` и lifecycle `CURRENT`.
+
+При failure pipeline извършва контролирано cleanup според етапа и пази machine-readable error state.
+
+### 11. Object Storage
 
 Оригиналният файл се пази в MinIO на AI-DATA-01.
 
@@ -258,13 +342,19 @@ Validated:
 - 38 passing unit tests.
 - real DGX smoke test with `READY` and `CURRENT`.
 
-Open WebUI upload integration and Nextcloud external-source versioning remain separate acceptance items.
+Open WebUI upload integration remains a separate acceptance item.
 
-## API
+## API status
 
-Планиран минимален API:
+Implemented foundation:
 
-### POST /v1/documents/ingest
+- `POST /v1/documents/ingest`
+- `POST /v1/documents/process`
+- `POST /v1/integrations/paperless/webhook`
+- `GET /v1/documents/{document_id}/versions`
+- `GET /v1/documents/{document_id}/versions/{version}`
+- `GET /v1/documents/{ingestion_id}/status`
+- `GET /v1/documents/{ingestion_id}`
 
 Авторитетна production входна точка за документ.
 
@@ -286,7 +376,6 @@ Pipeline:
 
 Explicit normalized-document path. Използва същия ingestion pipeline, но връща нормализирания документ. При duplicate process заявка съществуващият нормализиран документ може да бъде реконструиран от Knowledge Engine chunks и persisted metadata.
 
-
 ### GET /v1/documents/{document_id}
 
 Връща lifecycle/status metadata.
@@ -303,7 +392,7 @@ Explicit normalized-document path. Използва същия ingestion pipelin
 
 Спира pending/running ingestion job при безопасно състояние.
 
-Първата implementation версия не изисква всички endpoints.
+Първата implementation версия не изисква всички endpoints. `reindex` и `cancel` остават бъдещи разширения и не са част от текущата приета production surface.
 
 ## Processing states
 
@@ -329,13 +418,13 @@ FAILED_NORMALIZATION
 FAILED_INDEXING
 ```
 
-Всеки failure трябва да има:
+Every failure should have:
 
 - stage
 - machine-readable error code
 - human-readable message
 - document_id
-- retryable flag
+- retryable flag where supported
 
 ## Security rules
 
@@ -373,6 +462,29 @@ Metrics:
 - failure rate
 - duplicate rate
 - indexing latency
+
+## Validation checkpoint — 2026-09-28
+
+Current Document Ingestion unit baseline:
+
+```
+24 passed, 0 failed, 6 warnings
+```
+
+Validated in the latest code sequence:
+
+- `source_reference` added to the document model.
+- PostgreSQL version schema and row mapping carry `source_reference`.
+- Repository `register_version()` persists `source_reference`.
+- Pipeline lookup and metadata reconstruction carry `source_reference`.
+- `/v1/documents/ingest` and `/v1/documents/process` expose the updated metadata flow.
+- Paperless webhook keeps source system/reference semantics.
+- Duplicate reconstruction test passes with `source_reference=None` fixture.
+- Full unit suite passes after the duplicate fixture correction.
+
+Warnings are non-fatal PyMuPDF deprecation warnings and pytest cache permission warnings.
+
+Current acceptance is implementation-level. Real DGX runtime acceptance of the latest changes, Open WebUI routing and complete final E2E acceptance remain pending.
 
 ## Initial implementation scope
 
@@ -439,3 +551,92 @@ Expected:
 10. source/provenance is preserved
 
 The test is not DONE until the full flow is executed on the DGX runtime.
+
+
+## Nextcloud E2E versioning acceptance — 2026-09-28
+
+Validated on the DGX runtime through the Nextcloud poller and the Document Ingestion entry point.
+
+Tested flow:
+1. Poller lists Corporate AI/Incoming/ through WebDAV and tracks the file ETag.
+2. An unchanged file is skipped when the ETag is unchanged.
+3. After the file content changes, a new ETag is detected and the file is downloaded.
+4. The changed valid DOCX is submitted to POST /v1/documents/ingest and reaches READY.
+5. The same source_reference, Corporate AI/Incoming/проект.docx, resolves the existing logical document.
+6. The existing document_id is retained and the changed content creates version 2.
+7. Version 1 is persisted as SUPERSEDED and version 2 as CURRENT.
+8. supersedes and superseded_by relationships are persisted.
+9. Canonical storage keys are version-specific.
+
+This validates the changed-file → stable logical document → automatic version progression → lifecycle transition path.
+
+Persistent poller state across container restart remains a separate hardening task.
+
+
+## Runtime stabilization checkpoint — 2026-09-30
+
+### Multipart staging
+
+The service uses a 512 MB /tmp tmpfs in its deployment. This is required for bounded multipart upload staging and avoids the previous 64 MB tmpfs failure boundary. Canonical sources remain outside the container staging area.
+
+### PDF page count
+
+IngestResponse exposes page_count for successful PDF processing alongside chunk_count and indexed_count. The field is intended for immediate caller/UI synchronization; the current PostgreSQL document_versions schema does not persist page/chunk/index counters as authoritative version fields.
+
+### Vision structured output
+
+PDF Vision requests use:
+- response_format: {"type": "json_object"}
+- max_tokens: 4096
+
+This was added after nondeterministic PDF_VISION_INVALID_JSON failures on scanned pages. A direct component validation against an 87-page scanned PDF produced valid structured results for all 87 pages. The real /v1/documents/process E2E remains the acceptance gate before declaring scanned-PDF Vision integration complete.
+
+### E2E acceptance in progress
+
+The active acceptance test submits a metadata-modified copy of A202401001-000-00_ Двустранно_подписан_договор (2).pdf through /v1/documents/process with a new SHA-256, specifically to prevent the normal content-hash deduplication branch from bypassing Vision.
+
+Expected acceptance path:
+
+multipart upload → security → PDF routing → 87-page Vision → normalization → chunking → Knowledge Engine → embedding → Qdrant → READY/CURRENT
+
+Do not use /v1/documents/status; the valid job-status endpoint requires the actual ingestion ID: /v1/documents/{ingestion_id}/status. The current HTTP request must be allowed to finish before evaluating the result.
+
+
+## Nextcloud clean E2E acceptance — 2026-09-30
+
+The Nextcloud poller was validated against a genuinely new PDF through the production-oriented `POST /v1/documents/ingest` entry point.
+
+Test document:
+```
+уведомително писмо ДБТ _signed.pdf
+```
+
+Observed runtime path:
+
+```
+Nextcloud WebDAV
+  → Nextcloud poller
+  → POST /v1/documents/ingest
+  → Document Ingestion pipeline
+  → Knowledge Engine / Qdrant
+  → MetaVox write-back
+```
+
+Acceptance result:
+- Nextcloud download: successful.
+- Ingestion status: `READY`.
+- document_id: `b4a8fd9c-1d4d-4199-8e3e-0e1df252c80a`.
+- version: 1.
+- page_count: 1.
+- chunk_count: 1.
+- indexed_count: 1.
+- warnings: `[]`.
+- MetaVox status: `READY FOR RAG`.
+- `rag_ready=1`.
+- The next poll skipped the unchanged file using its unchanged ETag.
+
+This is the accepted clean happy path for the current Nextcloud document entry point. It is distinct from earlier duplicate-reuse tests and therefore does not depend on `DUPLICATE_CONTENT_REUSED`.
+
+A separate earlier first attempt for another new PDF returned HTTP 422. After retry, that file also reached READY. The 422 exposed a useful pipeline-error detail path; it does not invalidate this clean acceptance case.
+
+The remaining production acceptance items are outside this specific Nextcloud clean-path milestone: Open WebUI upload routing, independent Open WebUI `file-*` collection prevention, scanned/complex PDF OCR/Vision E2E, and validation of poller state durability across container restart.
