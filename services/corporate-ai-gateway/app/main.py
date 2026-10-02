@@ -10,7 +10,9 @@ import re
 import socket
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
@@ -61,6 +63,8 @@ DOCUMENT_INGESTION_URL = os.getenv(
     "http://corporate-ai-document-ingestion:8095",
 ).rstrip("/")
 GATEWAY_API_KEY = os.getenv("GATEWAY_API_KEY", "")
+CORPORATE_AI_TIMEZONE = os.getenv("CORPORATE_AI_TIMEZONE", "Europe/Sofia")
+LOCAL_TIMEZONE = ZoneInfo(CORPORATE_AI_TIMEZONE)
 
 app = FastAPI(title="Corporate AI Gateway", version=VERSION)
 
@@ -133,6 +137,39 @@ def openai_response(content: str, model: str, metadata: dict[str, Any]):
     }
 
 
+_CURRENT_TIME_MARKER = "[CORPORATE_AI_CURRENT_TIME]"
+
+
+def current_time_context() -> str:
+    now_utc = datetime.now(timezone.utc)
+    now_local = now_utc.astimezone(LOCAL_TIMEZONE)
+    return (
+        f"{_CURRENT_TIME_MARKER}\n"
+        f"Current local date: {now_local.date().isoformat()}\n"
+        f"Current local time: {now_local.strftime('%H:%M:%S')}\n"
+        f"Weekday: {now_local.strftime('%A')}\n"
+        f"Timezone: {CORPORATE_AI_TIMEZONE}\n"
+        f"Current UTC timestamp: {now_utc.isoformat()}\n"
+        "Source: authoritative system clock"
+    )
+
+
+def with_current_time_context(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if any(
+        _CURRENT_TIME_MARKER in str(message.get("content", ""))
+        for message in messages
+        if message.get("role") == "system"
+    ):
+        return messages
+
+    return [
+        {"role": "system", "content": current_time_context()},
+        *messages,
+    ]
+
+
 def extract_qwen_content(data: dict[str, Any]) -> str:
     try:
         content = data["choices"][0]["message"]["content"]
@@ -147,6 +184,8 @@ async def qwen_chat(
     temperature: float = 0.2,
     max_tokens: int | None = None,
 ) -> str:
+    messages = with_current_time_context(messages)
+
     payload: dict[str, Any] = {
         "model": QWEN_MODEL,
         "messages": messages,
@@ -184,6 +223,8 @@ async def qwen_chat_with_tools(
     temperature: float = 0.2,
     max_tokens: int | None = None,
 ) -> dict[str, Any]:
+    messages = with_current_time_context(messages)
+
     payload: dict[str, Any] = {
         "model": QWEN_MODEL,
         "messages": messages,

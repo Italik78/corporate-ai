@@ -921,3 +921,50 @@ def test_web_fetch_allows_safe_redirect(monkeypatch):
     assert evidence["url"] == "https://example.com/final"
     assert evidence["content"] == "final"
     assert evidence["redirects"] == 1
+
+
+def test_current_time_context_uses_configured_timezone():
+    from app.main import current_time_context
+
+    context = current_time_context()
+
+    assert "CORPORATE_AI_CURRENT_TIME" in context
+    assert "Timezone: Europe/Sofia" in context
+    assert "Current local date:" in context
+    assert "Current local time:" in context
+    assert "Weekday:" in context
+    assert "Current UTC timestamp:" in context
+    assert "Source: authoritative system clock" in context
+
+
+def test_current_time_context_has_valid_date_and_time():
+    from datetime import datetime
+    import re
+    from app.main import current_time_context
+
+    context = current_time_context()
+
+    date_match = re.search(r"Current local date: (\d{4}-\d{2}-\d{2})", context)
+    time_match = re.search(r"Current local time: (\d{2}:\d{2}:\d{2})", context)
+    utc_match = re.search(r"Current UTC timestamp: (.+)", context)
+
+    assert date_match
+    assert time_match
+    assert utc_match
+
+    datetime.strptime(date_match.group(1), "%Y-%m-%d")
+    datetime.strptime(time_match.group(1), "%H:%M:%S")
+    datetime.fromisoformat(utc_match.group(1))
+
+
+def test_current_time_context_is_injected_only_once():
+    from app.main import with_current_time_context
+
+    messages = [{"role": "user", "content": "Колко е часът?"}]
+
+    first = with_current_time_context(messages)
+    second = with_current_time_context(first)
+
+    assert len(first) == 2
+    assert len(second) == 2
+    assert second[0]["content"] == first[0]["content"]
