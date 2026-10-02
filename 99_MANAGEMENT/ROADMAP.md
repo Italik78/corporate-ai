@@ -119,13 +119,13 @@ Baseline:
 - `04_KNOWLEDGE/OPEN_WEBUI_INTEGRATION_AND_WEB_SEARCH.md`
 
 #### C1 — Open WebUI capability and integration validation
-- [ ] confirm installed Open WebUI version and enabled capabilities
+- [x] confirm installed Open WebUI version and enabled capabilities
 - [ ] validate External Knowledge → Qdrant
 - [ ] validate query embedding compatibility with Qwen3-Embedding-4B / 2560 dimensions
 - [ ] validate Knowledge Base behavior
 - [ ] validate Folder/workspace + System Prompt + Knowledge behavior
 - [ ] validate Filter / `file_handler`
-- [ ] validate OpenAPI tool server integration
+- [x] validate OpenAPI tool server integration
 - [ ] validate MCP integration where useful
 - [ ] select production upload/retrieval path
 - [ ] prevent duplicate Open WebUI production vector indexing
@@ -175,7 +175,7 @@ Baseline:
 - [x] add domain/timeout/size/concurrency controls
 - [ ] isolate web prompt injection
 - [x] keep LLM network access disabled
-- [ ] expose explicit web-search mode
+- [x] expose explicit web-search mode
 - [ ] implement internal-first/web-fallback mode
 - [ ] implement internal-only/offline mode
 - [ ] implement Web Evidence Evaluation separate from retrieval status
@@ -198,7 +198,7 @@ Baseline:
 - [ ] multi-document query
 - [ ] whole-document analysis
 - [ ] current/superseded version test
-- [ ] explicit web query
+- [x] explicit web query
 - [ ] mixed internal + web query
 - [ ] citation/provenance verification
 - [ ] blocked-domain and prompt-injection tests
@@ -311,3 +311,11 @@ Acceptance result: the Nextcloud → Document Ingestion → Knowledge Engine/Qdr
 - [ ] Validate Nextcloud poller state durability across container restart.
 
 Important monitoring correction: /v1/documents/status is not a valid route. The accepted status endpoint is /v1/documents/{ingestion_id}/status. The ingestion ID must be obtained from the active request result/logs or persistent job record before using that endpoint.
+
+### 2026-10-02 — Open WebUI Web Search / Web Fetch validation
+
+The installed Open WebUI `v0.11.4` runtime is connected to the Corporate AI Gateway through an OpenAPI tool server. Native Qwen tool calling and the controlled server-side tool loop are validated for `web_search` and `web_fetch`.
+
+The Gateway now maps OpenAPI operation IDs to internal tool executors and applies explicit web-search tool selection. Web Fetch was validated against a real modern web page after increasing the production response-size limit from 256 KiB to 2 MiB.
+
+This closes the basic C5 Web Search/Web Fetch runtime validation. Security/policy work such as prompt-injection isolation, internal-first/web-fallback, internal-only mode and Web Evidence Evaluation remains open.
