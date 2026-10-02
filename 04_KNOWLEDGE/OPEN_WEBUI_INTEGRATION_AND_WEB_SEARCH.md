@@ -402,7 +402,7 @@ Tool execution remains subject to Corporate AI Tool Policy.
 
 ### Phase C1 — Open WebUI integration discovery
 
-- [ ] Confirm installed Open WebUI version and exact enabled capabilities.
+- [x] Confirm installed Open WebUI version and exact enabled capabilities.
 - [ ] Validate External Knowledge → Qdrant against `corporate_knowledge`.
 - [ ] Determine whether Open WebUI can use Qwen3-Embedding-4B query embeddings directly.
 - [ ] Validate metadata mappings and citations.
@@ -485,6 +485,30 @@ First validate the documented Open WebUI extension points on the installed deplo
 
 1. External Knowledge → Qdrant.
 2. Filter/file_handler.
-3. Native Web Search / tool calling.
+3. Native Web Search / tool calling — validated on the DGX runtime for `web_search` and `web_fetch` through the Corporate AI Gateway.
 
 Then implement the smallest integration that preserves the Corporate AI source-of-truth boundaries.
+
+## 2026-10-02 — Open WebUI native tool validation checkpoint
+
+The installed Open WebUI runtime is **v0.11.4**. The `corporate-ai` model is connected to the Corporate AI Gateway through an OpenAPI tool server and native function calling.
+
+Validated end-to-end on the DGX runtime:
+
+- Open WebUI → Corporate AI Gateway → Qwen3.6 native tool calling works.
+- `web_search` works through the controlled Gateway tool loop.
+- `web_fetch` works through the controlled Gateway tool loop.
+- Open WebUI explicit web-search requests are routed with the Web Search tool and a required tool call.
+- OpenAPI operation IDs are mapped to the internal Gateway tool names (`web_search`, `web_fetch`, `knowledge_search`).
+- URL fetching enforces content-type, redirect, timeout and response-size limits.
+- Production Web Fetch response limit was raised from 256 KiB to **2 MiB** after a real Qdrant page exceeded the original limit.
+- Real Open WebUI tests successfully retrieved current Qdrant page content and returned page title/sections.
+
+Observed implementation fixes:
+
+1. Open WebUI model/tool-server metadata was resolved server-side so the Gateway OpenAPI tools reach the native Qwen tool loop.
+2. Gateway tool dispatch now aliases OpenAPI operation IDs to the corresponding internal executors.
+3. Explicit web-search requests filter the tool set to `web_search` and use `tool_choice=required`.
+4. Web Fetch now accepts production pages up to 2 MiB while retaining a hard resource boundary.
+
+The Web Search and Web Fetch paths are therefore **validated**, while prompt-injection isolation, internal-first/web-fallback policy and internal-only/offline policy remain open work.
