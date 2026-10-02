@@ -179,7 +179,7 @@ Baseline:
 - [ ] implement internal-first/web-fallback mode
 - [ ] implement internal-only/offline mode
 - [ ] implement Web Evidence Evaluation separate from retrieval status
-- [ ] provide authoritative current date/time/timezone to the LLM
+- [x] provide authoritative current date/time/timezone to the LLM through the Gateway/Qwen transport layer
 
 #### C6 — Agent and reasoning workflows
 - [ ] Agent Controller

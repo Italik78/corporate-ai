@@ -341,5 +341,20 @@ The clean happy path is therefore accepted. A separate earlier 422 on `A20260030
 - Internal-first / web-fallback mode.
 - Internal-only / offline mode.
 - Separate Web Evidence Evaluation layer above retrieval.
-- Authoritative current date, time and timezone context for the LLM.
 - Open WebUI upload → Document Ingestion production integration.
+
+## 2026-10-02 — Authoritative current time context checkpoint
+
+### Completed and validated
+
+- Corporate AI Gateway now injects authoritative current date, local time, weekday, IANA timezone and UTC timestamp into every Qwen request.
+- The default authoritative timezone is `Europe/Sofia` and can be configured through `CORPORATE_AI_TIMEZONE`.
+- Time context is injected centrally at the Qwen transport layer, covering normal requests and the server-side tool loop.
+- Duplicate time-context injection is prevented across repeated tool-loop calls.
+- Runtime validation confirmed that the real Qwen model returns the current local date and time from the injected authoritative context.
+- Gateway test suite: 39 passed; only the existing Starlette/AnyIO deprecation warning remains.
+- Commit: `e279eee feat(gateway): provide authoritative current time to qwen`.
+
+### Scope note
+
+- This checkpoint covers Qwen calls routed through the Corporate AI Gateway. The separate Knowledge Engine LLM client remains a distinct integration point.
