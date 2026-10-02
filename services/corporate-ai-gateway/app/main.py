@@ -157,16 +157,29 @@ def current_time_context() -> str:
 def with_current_time_context(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    if any(
-        _CURRENT_TIME_MARKER in str(message.get("content", ""))
-        for message in messages
+    system_messages = [
+        message for message in messages
         if message.get("role") == "system"
-    ):
-        return messages
+    ]
+    non_system_messages = [
+        message for message in messages
+        if message.get("role") != "system"
+    ]
+
+    system_contents = [
+        str(message.get("content", ""))
+        for message in system_messages
+        if str(message.get("content", "")).strip()
+    ]
+
+    if not any(_CURRENT_TIME_MARKER in content for content in system_contents):
+        system_contents.insert(0, current_time_context())
+
+    merged_system = "\n\n".join(system_contents)
 
     return [
-        {"role": "system", "content": current_time_context()},
-        *messages,
+        {"role": "system", "content": merged_system},
+        *non_system_messages,
     ]
 
 
@@ -195,7 +208,7 @@ async def qwen_chat(
     if max_tokens is not None:
         payload["max_tokens"] = max_tokens
 
-    logging.getLogger("corporate_ai.gateway").info(
+    print(
         "QWEN_REQUEST %s",
         json.dumps(payload, ensure_ascii=False, default=str),
     )
@@ -208,6 +221,16 @@ async def qwen_chat(
             )
             response.raise_for_status()
             return extract_qwen_content(response.json())
+    except httpx.HTTPStatusError as exc:
+        logging.getLogger("corporate_ai.gateway").error(
+            "QWEN_UPSTREAM_ERROR status=%s body=%s",
+            exc.response.status_code,
+            exc.response.text[:4000],
+        )
+        raise HTTPException(
+            status_code=502,
+            detail={"component": "qwen", "error": str(exc)},
+        ) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=502,
@@ -238,7 +261,7 @@ async def qwen_chat_with_tools(
     if tool_choice is not None:
         payload["tool_choice"] = tool_choice
 
-    logging.getLogger("corporate_ai.gateway").info(
+    print(
         "QWEN_TOOL_REQUEST %s",
         json.dumps(payload, ensure_ascii=False, default=str),
     )
@@ -254,6 +277,7 @@ async def qwen_chat_with_tools(
 
         try:
             message = data["choices"][0]["message"]
+            print("QWEN_TOOL_RESPONSE", json.dumps(message, ensure_ascii=False, default=str), flush=True)
         except (KeyError, IndexError, TypeError):
             raise HTTPException(status_code=502, detail="Invalid Qwen tool response")
 
@@ -262,6 +286,16 @@ async def qwen_chat_with_tools(
 
         return message
 
+    except httpx.HTTPStatusError as exc:
+        logging.getLogger("corporate_ai.gateway").error(
+            "QWEN_UPSTREAM_ERROR status=%s body=%s",
+            exc.response.status_code,
+            exc.response.text[:4000],
+        )
+        raise HTTPException(
+            status_code=502,
+            detail={"component": "qwen", "error": str(exc)},
+        ) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=502,
@@ -900,6 +934,13 @@ async def execute_tool_call(
     name: str,
     arguments: str | dict[str, Any],
 ) -> dict[str, Any]:
+    tool_aliases = {
+        "web_search_v1_tools_web_search_post": "web_search",
+        "web_fetch_v1_tools_web_fetch_post": "web_fetch",
+        "knowledge_search_v1_tools_knowledge_search_post": "knowledge_search",
+    }
+    name = tool_aliases.get(name, name)
+
     executor = TOOL_EXECUTORS.get(name)
     request_model = TOOL_REQUEST_MODELS.get(name)
 
@@ -1337,6 +1378,21 @@ async def models():
     }
 
 
+def _is_web_search_request(question: str) -> bool:
+    text = question.lower()
+    patterns = (
+        r"потърси.{0,80}интернет",
+        r"търси.{0,80}интернет",
+        r"провери.{0,80}онлайн",
+        r"актуалн(а|и|о|ите)",
+        r"последн(а|ата|ите|о)",
+        r"latest",
+        r"search.{0,40}web",
+        r"search.{0,40}internet",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
 async def _run_general_tool_loop(
     messages: list[dict[str, Any]],
     *,
@@ -1396,12 +1452,12 @@ async def chat_completions(request: ChatRequest, http_request: Request):
         for item in tools
         if isinstance(item, dict)
     ]
-    logging.getLogger("corporate_ai.gateway").info(
-        "CHAT_DIAGNOSTIC tools=%s tool_choice=%r tool_ids=%r tool_servers=%s",
+    print(
+        "CHAT_DIAGNOSTIC tools=%s tool_choice=%r tool_ids=%r tool_servers=%r",
         tool_names,
         raw_body.get("tool_choice"),
         raw_body.get("tool_ids"),
-        len(raw_body.get("tool_servers") or []),
+        raw_body.get("tool_servers"),
     )
 
     question = latest_user_message(request.messages)
@@ -1409,6 +1465,7 @@ async def chat_completions(request: ChatRequest, http_request: Request):
         raise HTTPException(status_code=400, detail="No user message supplied")
 
     route, route_reason = await classify_route(question, request.messages)
+    print("ROUTE_DIAGNOSTIC", route, route_reason, flush=True)
 
     if route == "general":
         system = (
@@ -1416,12 +1473,13 @@ async def chat_completions(request: ChatRequest, http_request: Request):
             "using your general knowledge and reasoning. Do not claim to have consulted "
             "company documents unless they were actually provided through the knowledge route. "
             "Do not invent company-specific facts."
+            "When the user asks to search the internet, find current or latest information, verify information online, or provide web sources, you MUST use the available web_search tool before answering. When the user provides a URL and asks to inspect, read, or retrieve its contents, use the web_fetch tool. Do not claim that web search or web fetch is unavailable when the corresponding tool is present. After using a web tool, base the answer on its returned results and cite or list the relevant sources when requested.",
         )
         qwen_messages = [{"role": "system", "content": system}] + messages_to_openai(request.messages)
         answer = await _run_general_tool_loop(
             qwen_messages,
-            tools=tools or None,
-            tool_choice=raw_body.get("tool_choice"),
+            tools=([t for t in (tools or []) if t.get("function", {}).get("name") == "web_search_v1_tools_web_search_post"] if _is_web_search_request(question) else (tools or None)),
+            tool_choice=("required" if _is_web_search_request(question) else raw_body.get("tool_choice")) ,
             temperature=request.temperature if request.temperature is not None else 0.2,
             max_tokens=request.max_tokens,
         )

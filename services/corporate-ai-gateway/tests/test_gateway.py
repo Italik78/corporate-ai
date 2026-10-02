@@ -968,3 +968,31 @@ def test_current_time_context_is_injected_only_once():
     assert len(first) == 2
     assert len(second) == 2
     assert second[0]["content"] == first[0]["content"]
+
+
+def test_current_time_context_moves_all_system_messages_to_front():
+    from app.main import with_current_time_context
+
+    messages = [
+        {"role": "user", "content": "Първи въпрос"},
+        {"role": "system", "content": "Open WebUI system prompt"},
+        {"role": "assistant", "content": "Предишен отговор"},
+        {"role": "user", "content": "Втори въпрос"},
+    ]
+
+    result = with_current_time_context(messages)
+
+    assert [message["role"] for message in result] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert "Open WebUI system prompt" in result[0]["content"]
+    assert "[CORPORATE_AI_CURRENT_TIME]" in result[0]["content"]
+    assert result[0]["content"].startswith("[CORPORATE_AI_CURRENT_TIME]")
+    assert [message["content"] for message in result[1:]] == [
+        "Първи въпрос",
+        "Предишен отговор",
+        "Втори въпрос",
+    ]
