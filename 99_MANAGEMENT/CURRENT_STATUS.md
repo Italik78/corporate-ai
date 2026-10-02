@@ -1,6 +1,6 @@
 # CURRENT STATUS
 
-**Checkpoint:** 2026-09-30
+**Checkpoint:** 2026-10-02
 
 ## Project
 
@@ -358,3 +358,24 @@ The clean happy path is therefore accepted. A separate earlier 422 on `A20260030
 ### Scope note
 
 - This checkpoint covers Qwen calls routed through the Corporate AI Gateway. The separate Knowledge Engine LLM client remains a distinct integration point.
+
+### 2026-10-02 — Open WebUI Web Search / Web Fetch validation
+
+Open WebUI native tool calling is now validated against the real Corporate AI Gateway on the DGX runtime.
+
+Validated:
+- Open WebUI `v0.11.4` reaches the Gateway OpenAPI tool server.
+- `corporate-ai` uses native function calling and server-side tool resolution.
+- Explicit web-search requests execute `web_search` through the Gateway tool loop.
+- URL inspection requests execute `web_fetch` through the Gateway tool loop.
+- OpenAPI operation IDs are correctly mapped to internal Gateway executors.
+- Real Web Search returned sources for an up-to-date Qdrant query.
+- Real Web Fetch successfully retrieved `https://qdrant.tech/` and returned page title and sections.
+- Web Fetch production response limit was increased from 256 KiB to 2 MiB after the real Qdrant page exceeded the original limit.
+
+Still open:
+- web prompt-injection isolation;
+- internal-first / web-fallback mode;
+- internal-only / offline mode;
+- separate Web Evidence Evaluation layer;
+- Open WebUI upload → Document Ingestion production integration.
