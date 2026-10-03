@@ -81,3 +81,19 @@
 59. Nextcloud MetaVox is the current display-layer mechanism for showing Corporate AI processing state in the Nextcloud file list. It does not replace Corporate AI as the authoritative metadata, ingestion or retrieval system.
 60. The current Corporate AI file-list display fields are status, version, pages, chunks, indexed count and RAG-ready state. These are operational presentation metadata and must be sourced from the authoritative ingestion result rather than independently computed by Nextcloud.
 61. The monitoring route is `/v1/documents/{ingestion_id}/status`; `/v1/documents/status` does not exist and a 404 from that path is expected. The active E2E request must not be interrupted because of that monitoring mistake.
+
+## 2026-10-03 — AI Orchestrator / grounded reasoning direction
+
+62. Adopt `01_ARCHITECTURE/AI_ORCHESTRATOR.md` as the authoritative contract for the Corporate AI reasoning/orchestration layer.
+63. The target product behavior is a grounded AI assistant that seeks the best verifiable answer rather than answering at any cost.
+64. The Orchestrator sits between Corporate AI Gateway and specialized capabilities and coordinates task understanding, clarification, planning, Corporate RAG, Web Research, document analysis, controlled tools, evidence evaluation and verification.
+65. Knowledge Engine remains the retrieval/evidence boundary. The Orchestrator must not duplicate it or become an alternative source of truth.
+66. Corporate, Web and Tool/API evidence are separate provenance classes and must remain distinguishable through the complete workflow.
+67. Retrieved documents, OCR output, Qdrant content, search results and web pages are untrusted data. None of them may authorize tools, alter policies or override system instructions.
+68. The Orchestrator must ask clarification questions when missing context materially changes the answer and cannot be established through authorized sources or conversation context.
+69. The Orchestrator may perform bounded iterative retrieval and task decomposition. It must operate under explicit tool, step, time and resource budgets.
+70. Retrieval score alone is not an authority or truth criterion. Applicability must consider scope, version, authority, effective dates, conditions and semantic metric identity.
+71. The first domain acceptance scenario for the general reasoning layer is conditional SLA reasoning. SLA values must not be hard-coded into the Orchestrator.
+72. The final response may be a direct answer, conditional answer, partial answer, clarification request or controlled no-answer depending on the evidence state.
+73. The system must preserve workflow traceability without exposing private model chain-of-thought.
+74. Implementation will reuse the current Gateway, Knowledge Engine, Document Ingestion, Qdrant, PostgreSQL, controlled Web Search, Tool Policy and Qwen3.6 rather than replacing them with a separate platform.
