@@ -6,15 +6,28 @@ Open WebUI
 ↓
 Corporate AI Gateway
 ↓
-Agent
-├── Task understanding / planning
-├── Tool Policy / approval
-├── Knowledge & Document Tools
-│   ├── Document Ingestion
-│   ├── Retrieval / Reranking
+AI Orchestrator / Mind
+├── Conversation Context
+├── Task Understanding
+├── Clarification
+├── Planning / Decomposition
+├── Corporate Knowledge
+│   ├── Retrieval
+│   ├── Reranking
 │   └── Evidence / Provenance
-├── Qwen3.6
-└── Office / File Tools
+├── Web Research
+│   ├── Search
+│   ├── Fetch
+│   └── Web Evidence
+├── Document Analysis
+├── Controlled Tools
+├── Verification
+└── Qwen3.6
+
+Source classes remain separated:
+- Corporate
+- Web
+- Tool/API
 
 Document Knowledge Flow
 
@@ -42,9 +55,29 @@ Qdrant
 ↓
 Retrieval / Evidence
 ↓
-Agent Context
+AI Orchestrator
+↓
+Verification
 ↓
 Qwen3.6
+↓
+Grounded Answer + Provenance
+
+Web Research Flow
+
+AI Orchestrator
+↓
+Web Search Gateway
+↓
+Search / Fetch
+↓
+Normalized Web Evidence
+↓
+Evidence Evaluation
+↓
+AI Orchestrator
+↓
+Verified Answer + Web Provenance
 
 Large documents are processed through bounded retrieval or planned section-by-section analysis. Original files remain outside Qdrant.
 
