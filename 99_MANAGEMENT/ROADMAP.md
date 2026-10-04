@@ -319,3 +319,56 @@ The installed Open WebUI `v0.11.4` runtime is connected to the Corporate AI Gate
 The Gateway now maps OpenAPI operation IDs to internal tool executors and applies explicit web-search tool selection. Web Fetch was validated against a real modern web page after increasing the production response-size limit from 256 KiB to 2 MiB.
 
 This closes the basic C5 Web Search/Web Fetch runtime validation. Security/policy work such as prompt-injection isolation, internal-first/web-fallback, internal-only mode and Web Evidence Evaluation remains open.
+
+
+## C8 — Conversation & Context Management
+
+**Status: ARCHITECTURE ACCEPTED / IMPLEMENTATION NOT STARTED**
+
+Baseline:
+- `01_ARCHITECTURE/CONVERSATION_CONTEXT_MANAGEMENT.md`
+
+### C8.1 — Persistent conversation foundation
+- [ ] conversation persistence
+- [ ] complete message history
+- [ ] conversation state
+- [ ] conversation summaries
+- [ ] conversation milestones
+- [ ] conversation artifacts
+
+### C8.2 — Memory
+- [ ] structured conversation memory model
+- [ ] provenance and confidence
+- [ ] memory lifecycle
+- [ ] memory retrieval
+- [ ] memory conflict detection
+- [ ] cross-conversation isolation
+
+### C8.3 — Context Manager
+- [ ] model-aware tokenizer integration
+- [ ] dynamic context budget
+- [ ] recent-history selection
+- [ ] state and memory selection
+- [ ] RAG/web/tool context budgeting
+- [ ] output reserve
+- [ ] deterministic context assembly
+- [ ] context truncation and fallback policy
+
+### C8.4 — Observability and acceptance
+- [ ] context-run telemetry
+- [ ] token accounting by context source
+- [ ] context selection diagnostics
+- [ ] long-chat continuation test
+- [ ] important-decision retention test
+- [ ] memory conflict test
+- [ ] tool-result compression test
+- [ ] cross-conversation isolation test
+- [ ] DGX runtime acceptance
+
+Initial Qwen3.6 operating targets:
+- normal corporate chat: 24K–32K tokens;
+- complex reasoning: 32K–64K;
+- large-document/multi-source work: 64K–128K;
+- exceptional full-context cases: up to 262K.
+
+The roadmap must not mark C8 complete from documentation alone. Runtime implementation and DGX validation are required.
