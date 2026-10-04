@@ -109,11 +109,62 @@ def test_retrieval_rewrite_prompt_contains_conversation_and_current_question():
     assert "не добавяй факти" in prompt.lower()
 
 
-def test_document_api_key_is_optional_by_default(monkeypatch):
+def test_document_api_key_fails_closed_by_default(monkeypatch):
     import app.main as main
+    import pytest
 
     monkeypatch.setattr(main, "GATEWAY_API_KEY", "")
-    authorize_document_request(None)
+    with pytest.raises(main.HTTPException) as exc:
+        authorize_document_request(None)
+    assert exc.value.status_code == 503
+
+
+def test_tool_api_key_fails_closed_by_default(monkeypatch):
+    import app.main as main
+    import pytest
+
+    monkeypatch.setattr(main, "GATEWAY_API_KEY", "")
+    with pytest.raises(main.HTTPException) as exc:
+        main.authorize_tool_request(None)
+    assert exc.value.status_code == 503
+
+
+def test_chat_uses_brain_control_plane_even_when_client_supplies_tools(monkeypatch):
+    import app.main as main
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(main, "GATEWAY_API_KEY", "test-key")
+    calls = []
+
+    async def orchestrate(question, messages):
+        calls.append((question, messages))
+        return {
+            "answer": "Това е общ отговор.",
+            "answer_status": "GENERAL",
+            "evidence_status": "NOT_REQUIRED",
+            "resolution": "ANSWERABLE",
+            "citations": [],
+            "provenance": [],
+        }
+
+    async def forbidden_route(*args, **kwargs):
+        raise AssertionError("Gateway direct route must not run")
+
+    monkeypatch.setattr(main, "run_orchestrator", orchestrate)
+    monkeypatch.setattr(main, "classify_route", forbidden_route)
+    client = TestClient(main.app)
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-key"},
+        json={
+            "messages": [{"role": "user", "content": "Обясни фотосинтезата"}],
+            "tools": [{"type": "function", "function": {"name": "arbitrary_shell"}}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == "Това е общ отговор."
+    assert response.json()["corporate_ai"]["route"] == "orchestrator"
+    assert calls and calls[0][0] == "Обясни фотосинтезата"
 
 
 def test_document_api_key_rejects_invalid_key(monkeypatch):

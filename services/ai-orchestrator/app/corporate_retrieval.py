@@ -28,6 +28,7 @@ class CorporateRetrievalCapability(Capability):
         self.timeout_seconds = timeout_seconds or float(
             os.getenv("TIMEOUT_SECONDS", "120")
         )
+        self.service_token = os.getenv("KNOWLEDGE_ENGINE_SERVICE_TOKEN", "").strip()
 
     async def execute(self, request: CapabilityRequest) -> CapabilityResult:
         query = request.input.get("query")
@@ -52,6 +53,7 @@ class CorporateRetrievalCapability(Capability):
                 response = await client.post(
                     f"{self.base_url}/v1/search",
                     json=payload,
+                    headers={"Authorization": f"Bearer {self.service_token}"} if self.service_token else {},
                 )
                 response.raise_for_status()
                 data = response.json()

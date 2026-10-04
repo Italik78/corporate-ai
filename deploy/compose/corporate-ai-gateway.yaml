@@ -8,6 +8,7 @@ services:
       KNOWLEDGE_ENGINE_URL: "http://corporate-ai-knowledge-engine-0.3.1-test:8090"
       DOCUMENT_INGESTION_URL: "http://corporate-ai-document-ingestion:8095"
       GATEWAY_API_KEY: "${CORPORATE_AI_GATEWAY_API_KEY:-}"
+      ORCHESTRATOR_SERVICE_TOKEN: "${ORCHESTRATOR_GATEWAY_SERVICE_TOKEN:?ORCHESTRATOR_GATEWAY_SERVICE_TOKEN is required}"
       QWEN_BASE_URL: "http://corporate-ai-qwen36:8000/v1"
       QWEN_MODEL: "qwen36"
       MODEL_NAME: "corporate-ai"

@@ -5,6 +5,15 @@ from pydantic import BaseModel
 from .models import Budget
 
 
+def clamp_budget(requested: Budget, maximum: Budget | None = None) -> Budget:
+    """Clients may lower work budgets, never raise server configured limits."""
+    maximum = maximum or Budget()
+    return Budget(**{
+        field: min(getattr(requested, field), getattr(maximum, field))
+        for field in Budget.model_fields
+    })
+
+
 class BudgetUsage(BaseModel):
     steps: int = 0
     capability_calls: int = 0

@@ -67,6 +67,7 @@ ORCHESTRATOR_URL = os.getenv(
     "http://corporate-ai-orchestrator-0.1.0:8097",
 ).rstrip("/")
 GATEWAY_API_KEY = os.getenv("GATEWAY_API_KEY", "")
+ORCHESTRATOR_SERVICE_TOKEN = os.getenv("ORCHESTRATOR_SERVICE_TOKEN", "").strip()
 CORPORATE_AI_TIMEZONE = os.getenv("CORPORATE_AI_TIMEZONE", "Europe/Sofia")
 LOCAL_TIMEZONE = ZoneInfo(CORPORATE_AI_TIMEZONE)
 
@@ -133,7 +134,6 @@ async def run_orchestrator(
     payload = {
         "user_request": question,
         "messages": messages_to_openai(messages),
-        "source_policy": ["CORPORATE"],
     }
 
     async with httpx.AsyncClient(
@@ -143,6 +143,7 @@ async def run_orchestrator(
         response = await client.post(
             f"{ORCHESTRATOR_URL}/v1/orchestrate",
             json=payload,
+            headers={"Authorization": f"Bearer {ORCHESTRATOR_SERVICE_TOKEN}"} if ORCHESTRATOR_SERVICE_TOKEN else {},
         )
         response.raise_for_status()
         return response.json()
@@ -903,32 +904,19 @@ async def _execute_knowledge_search(
     request: KnowledgeSearchRequest,
 ) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            response = await client.post(
-                f"{KNOWLEDGE_ENGINE_URL}/v1/query",
-                json={
-                    "question": request.question,
-                    "top_k": request.top_k,
-                    "score_threshold": request.score_threshold,
-                },
-            )
-            response.raise_for_status()
-            result = response.json()
-            if not isinstance(result, dict):
-                raise HTTPException(
-                    status_code=502,
-                    detail="Invalid Knowledge Engine response",
-                )
-            return result
+        result = await run_orchestrator(
+            request.question,
+            [ChatMessage(role="user", content=request.question)],
+        )
+        if not isinstance(result, dict):
+            raise HTTPException(status_code=502, detail="Invalid Orchestrator response")
+        return result
     except httpx.TimeoutException as exc:
-        raise HTTPException(
-            status_code=504,
-            detail={"component": "knowledge-engine", "error": "TIMEOUT"},
-        ) from exc
+        raise HTTPException(status_code=504, detail={"component": "orchestrator", "error": "TIMEOUT"}) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=502,
-            detail={"component": "knowledge-engine", "error": str(exc)},
+            detail={"component": "orchestrator", "error": str(exc)},
         ) from exc
 
 
@@ -1034,24 +1022,14 @@ async def execute_tool_call(
 
 async def run_query(question: str) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            response = await client.post(
-                f"{KNOWLEDGE_ENGINE_URL}/v1/query",
-                json={
-                    "question": question,
-                    "top_k": RAG_TOP_K,
-                    "score_threshold": RAG_SCORE_THRESHOLD,
-                },
-            )
-            response.raise_for_status()
-            result = response.json()
-            if not isinstance(result, dict):
-                raise HTTPException(status_code=502, detail="Invalid Knowledge Engine response")
-            return result
+        result = await run_orchestrator(question, [ChatMessage(role="user", content=question)])
+        if not isinstance(result, dict):
+            raise HTTPException(status_code=502, detail="Invalid Orchestrator response")
+        return result
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=502,
-            detail={"component": "knowledge-engine", "error": str(exc)},
+            detail={"component": "orchestrator", "error": str(exc)},
         ) from exc
 
 
@@ -1155,7 +1133,7 @@ async def synthesize_grounded_answer(
 
 def authorize_document_request(x_api_key: str | None) -> None:
     if not GATEWAY_API_KEY:
-        return
+        raise HTTPException(status_code=503, detail="DOCUMENT_API_NOT_CONFIGURED")
     if not x_api_key or not secrets.compare_digest(x_api_key, GATEWAY_API_KEY):
         raise HTTPException(status_code=401, detail="INVALID_API_KEY")
 
@@ -1470,7 +1448,12 @@ async def _run_general_tool_loop(
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: ChatRequest, http_request: Request):
+async def chat_completions(
+    request: ChatRequest,
+    http_request: Request,
+    authorization: str | None = Header(default=None),
+):
+    authorize_tool_request(authorization)
     raw_body = await http_request.json()
     tools = raw_body.get("tools") or []
     tool_names = [
@@ -1490,7 +1473,10 @@ async def chat_completions(request: ChatRequest, http_request: Request):
     if not question:
         raise HTTPException(status_code=400, detail="No user message supplied")
 
-    route, route_reason = await classify_route(question, request.messages)
+    # All chat requests are handled by the Orchestrator's Brain and
+    # deterministic capability control plane. Client-supplied OpenAI tools do
+    # not grant execution permission.
+    route, route_reason = "orchestrator", "deterministic_control_plane"
     print("ROUTE_DIAGNOSTIC", route, route_reason, flush=True)
 
     if route == "general":

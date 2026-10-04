@@ -78,6 +78,7 @@ class CapabilityType(str, Enum):
     WEB_FETCH = "WEB_FETCH"
     LLM_REASONING = "LLM_REASONING"
     VERIFICATION = "VERIFICATION"
+    GENERAL_RESPONSE = "GENERAL_RESPONSE"
 
 
 class Budget(BaseModel):
@@ -212,9 +213,8 @@ class OrchestrationRequest(BaseModel):
     conversation_id: str | None = None
     user_request: str = Field(min_length=1)
     messages: list[dict[str, Any]] = Field(default_factory=list)
-    source_policy: list[SourceClass] = Field(
-        default_factory=lambda: [SourceClass.CORPORATE]
-    )
+    # Legacy client-supplied source_policy is intentionally ignored. The
+    # authoritative policy comes from trusted service configuration.
     requested_freshness: str | None = None
     output_constraints: AnswerConstraints = Field(
         default_factory=AnswerConstraints
@@ -237,3 +237,5 @@ class OrchestrationResponse(BaseModel):
     trace_id: str
     verification: VerificationResult | None = None
     state: TaskState = TaskState.TRACE_COMPLETE
+    brain_decision: dict[str, Any] = Field(default_factory=dict)
+    source_policy_mode: str = "INTERNAL_ONLY"

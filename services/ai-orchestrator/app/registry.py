@@ -15,6 +15,7 @@ class CapabilityRegistry:
             CapabilityType.WEB_SEARCH: WebSearchCapability(),
             CapabilityType.WEB_FETCH: WebFetchCapability(),
             CapabilityType.LLM_REASONING: LLMReasoningCapability(),
+            CapabilityType.GENERAL_RESPONSE: LLMReasoningCapability(),
         }
 
     def get(self, capability_type: CapabilityType) -> Capability:

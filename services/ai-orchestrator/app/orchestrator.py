@@ -21,14 +21,19 @@ from .web_research import (
     parse_web_fetch_selection,
 )
 from .models import (
+    AnswerStatus,
     CapabilityType,
     EvidenceStatus,
+    SourceClass,
     Plan,
     PlanStep,
     QuestionResolution,
     SemanticVerificationItem,
     StepStatus,
     SynthesisResult,
+    VerificationResult,
+    EvidenceStatus,
+    TaskType,
     Task,
     TaskState,
 )
@@ -164,6 +169,7 @@ class Orchestrator:
 
     async def _execute_step(
         self,
+        task: Task,
         step,
         budget: BudgetController,
     ) -> CapabilityResult | None:
@@ -184,10 +190,37 @@ class Orchestrator:
             budget.consume_capability_call()
             capability = self.registry.get(step.capability)
 
+            capability_input = step.input
+            if step.capability == CapabilityType.GENERAL_RESPONSE:
+                history = [
+                    message.model_dump()
+                    for message in task.conversation_context.messages
+                    if message.role in {"system", "user", "assistant"}
+                ]
+                if not any(message.get("role") == "user" for message in history):
+                    history.append({"role": "user", "content": task.user_request})
+                capability_input = {
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Answer general, non-corporate questions helpfully. "
+                                "You have no tools and no corporate evidence. Do not "
+                                "claim to have checked company records or current web sources. "
+                                "If the user asks for current or company-specific facts, say "
+                                "that this answer is ungrounded and request the appropriate research."
+                            ),
+                        },
+                        *history[-12:],
+                    ],
+                    "temperature": 0.2,
+                    "max_tokens": 1500,
+                }
+
             result = await capability.execute(
                 CapabilityRequest(
                     capability=step.capability,
-                    input=step.input,
+                    input=capability_input,
                 )
             )
 
@@ -225,7 +258,7 @@ class Orchestrator:
             except BudgetExceeded:
                 return None
 
-            result = await self._execute_step(step, budget)
+            result = await self._execute_step(task, step, budget)
 
             if result is not None:
                 results.append(result)
@@ -256,7 +289,7 @@ class Orchestrator:
                 if result.success:
                     completed_step_ids.add(step.step_id)
             else:
-                result = await self._execute_step(step, budget)
+                result = await self._execute_step(task, step, budget)
                 if result is not None:
                     results.append(result)
 
@@ -273,6 +306,30 @@ class Orchestrator:
                         evidence = result.data.get("evidence", [])
                         if isinstance(evidence, list):
                             web_evidence_candidates.extend(evidence)
+
+        if task.task_type == TaskType.GENERAL:
+            general_result = next(
+                (item for item in results if item.success and item.data.get("content")),
+                None,
+            )
+            answer = str(general_result.data["content"]) if general_result else ""
+            synthesis = SynthesisResult(
+                answer=answer,
+                resolution=(
+                    QuestionResolution.ANSWERABLE
+                    if answer.strip()
+                    else QuestionResolution.INSUFFICIENT
+                ),
+            )
+            evaluation = EvidenceEvaluationResult(status=EvidenceStatus.NOT_REQUIRED)
+            conflicts = ConflictAnalysisResult()
+            verification = VerificationResult(
+                passed=False,
+                reason="GENERAL_RESPONSE_IS_NOT_CORPORATE_EVIDENCE_VERIFIED",
+            )
+            task.state = TaskState.ANSWER if answer.strip() else TaskState.NO_ANSWER
+            plan.status = "EXECUTED"
+            return results, evaluation, conflicts, synthesis, verification
 
         # Web research is deliberately two-phase:
         # search first, then selectively fetch only sources chosen from
@@ -298,7 +355,10 @@ class Orchestrator:
                         web_search_evidence,
                         budget,
                     )
-                except BudgetExceeded:
+                except (BudgetExceeded, RuntimeError, ValueError):
+                    # Search snippets remain evidence candidates, but a broken
+                    # selector must not crash the whole request or authorize
+                    # an arbitrary fetch. Evaluation can still fail closed.
                     selection = None
 
                 if selection is not None:
@@ -337,6 +397,7 @@ class Orchestrator:
                         plan.steps.append(fetch_step)
 
                         result = await self._execute_step(
+                            task,
                             fetch_step,
                             budget,
                         )
@@ -379,6 +440,73 @@ class Orchestrator:
                 break
 
             task.state = TaskState.MORE_EVIDENCE_REQUIRED
+
+            web_search_already_ran = any(
+                item.success and item.capability == CapabilityType.WEB_SEARCH
+                for item in results
+            )
+            if (
+                not web_search_already_ran
+                and SourceClass.WEB in task.allowed_source_classes
+                and budget.usage.web_searches < task.budget.max_web_searches
+                and len(plan.steps) < plan.max_steps
+            ):
+                # Server policy may permit web fallback, but it is only used
+                # after corporate evidence is evaluated as insufficient.
+                search_step = PlanStep(
+                    step_id=f"web-fallback-{budget.usage.web_searches + 1}",
+                    type="SEARCH_WEB_FALLBACK",
+                    capability=CapabilityType.WEB_SEARCH,
+                    input={"query": task.normalized_question or task.user_request},
+                    evidence_required=True,
+                )
+                plan.steps.append(search_step)
+                search_result = await self._execute_step(task, search_step, budget)
+                if search_result is not None:
+                    results.append(search_result)
+                    if search_result.success:
+                        found = search_result.data.get("evidence", [])
+                        if isinstance(found, list):
+                            web_evidence_candidates.extend(found)
+
+                if search_result is not None and search_result.success and web_evidence_candidates:
+                    search_evidence = normalize_web_evidence(web_evidence_candidates)
+                    try:
+                        selection = await self.select_web_fetch_candidates(
+                            task, search_evidence, budget
+                        )
+                    except (BudgetExceeded, RuntimeError, ValueError):
+                        selection = None
+                    evidence_by_id = {item.evidence_id: item for item in search_evidence}
+                    for evidence_id in selection.evidence_ids if selection else []:
+                        source = evidence_by_id.get(evidence_id)
+                        if (
+                            source is None
+                            or not source.source_location
+                            or budget.usage.web_fetches >= task.budget.max_web_fetches
+                            or len(plan.steps) >= plan.max_steps
+                        ):
+                            continue
+                        fetch_step = PlanStep(
+                            step_id=f"web-fallback-fetch-{budget.usage.web_fetches + 1}",
+                            type="FETCH_WEB_FALLBACK_SOURCE",
+                            capability=CapabilityType.WEB_FETCH,
+                            input={"url": source.source_location},
+                            depends_on=[search_step.step_id],
+                            evidence_required=True,
+                        )
+                        plan.steps.append(fetch_step)
+                        fetch_result = await self._execute_step(task, fetch_step, budget)
+                        if fetch_result is not None:
+                            results.append(fetch_result)
+                            if fetch_result.success:
+                                fetched = fetch_result.data.get("evidence", [])
+                                if isinstance(fetched, list):
+                                    web_evidence_candidates.extend(fetched)
+
+                # Re-evaluate and synthesize from the new evidence before any
+                # further retrieval refinement. Budget limits bound this loop.
+                continue
 
             if budget.usage.retrieval_rounds >= task.budget.max_retrieval_rounds:
                 break
@@ -442,6 +570,37 @@ class Orchestrator:
             conflict.description
             for conflict in conflicts.conflicts
         ]
+
+        required_source_classes = {
+            TaskType.CORPORATE_KNOWLEDGE: {SourceClass.CORPORATE},
+            TaskType.WEB_RESEARCH: {SourceClass.WEB},
+            TaskType.CORPORATE_AND_WEB: {
+                SourceClass.CORPORATE,
+                SourceClass.WEB,
+            },
+        }.get(task.task_type, set())
+        if task.task_type == TaskType.CORPORATE_KNOWLEDGE and any(
+            item.success and item.capability == CapabilityType.WEB_SEARCH
+            for item in results
+        ):
+            # INTERNAL_FIRST_WEB_FALLBACK may answer from public evidence when
+            # corporate evidence is insufficient; it must then cite WEB.
+            required_source_classes = {SourceClass.WEB}
+        present_source_classes = {
+            item.source_class for item in evaluation.applicable
+        }
+        missing_source_classes = required_source_classes - present_source_classes
+        if missing_source_classes:
+            missing_names = sorted(item.value for item in missing_source_classes)
+            evaluation.status = EvidenceStatus.INSUFFICIENT_EVIDENCE
+            conflict_errors.append(
+                "REQUIRED_SOURCE_CLASS_MISSING:" + ",".join(missing_names)
+            )
+            synthesis = SynthesisResult(
+                answer="",
+                resolution=QuestionResolution.INSUFFICIENT,
+                uncertainty="Required evidence source class is unavailable.",
+            )
 
         verification = verify_evidence_support(
             claims=synthesis.material_claims,

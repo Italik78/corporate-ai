@@ -27,6 +27,7 @@ class WebFetchCapability(Capability):
         self.timeout_seconds = timeout_seconds or float(
             os.getenv("TIMEOUT_SECONDS", "120")
         )
+        self.gateway_api_key = os.getenv("GATEWAY_TOOL_API_KEY", "").strip()
 
     async def execute(self, request: CapabilityRequest) -> CapabilityResult:
         url = request.input.get("url")
@@ -46,6 +47,7 @@ class WebFetchCapability(Capability):
                 response = await client.post(
                     f"{self.base_url}/v1/tools/web_fetch",
                     json=payload,
+                    headers={"Authorization": f"Bearer {self.gateway_api_key}"} if self.gateway_api_key else {},
                 )
                 response.raise_for_status()
                 data = response.json()

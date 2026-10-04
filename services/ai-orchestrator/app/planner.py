@@ -60,11 +60,8 @@ def build_plan(task: Task) -> Plan:
                     evidence_required=True,
                 )
             )
-
         if SourceClass.WEB in task.allowed_source_classes:
-            depends_on = (
-                ["corporate-retrieval-1"] if steps else []
-            )
+            depends_on = ["corporate-retrieval-1"] if steps else []
             steps.append(
                 PlanStep(
                     step_id="web-search-1",
@@ -75,6 +72,17 @@ def build_plan(task: Task) -> Plan:
                     evidence_required=True,
                 )
             )
+
+    elif task.task_type == TaskType.GENERAL:
+        steps.append(
+            PlanStep(
+                step_id="general-response-1",
+                type="GENERAL_RESPONSE",
+                capability=CapabilityType.GENERAL_RESPONSE,
+                input={"query": task.normalized_question},
+                evidence_required=False,
+            )
+        )
 
     return Plan(
         task_id=task.task_id,

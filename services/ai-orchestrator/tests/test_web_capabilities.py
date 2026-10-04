@@ -58,6 +58,7 @@ def test_web_search_calls_gateway_tool():
             "count": 5,
             "language": "all",
         },
+        headers={},
     )
 
 
@@ -97,7 +98,65 @@ def test_web_fetch_calls_gateway_tool():
     client.post.assert_awaited_once_with(
         "http://gateway:8080/v1/tools/web_fetch",
         json={"url": "https://example.com/article"},
+        headers={},
     )
+
+
+def test_web_search_uses_configured_gateway_service_key(monkeypatch):
+    monkeypatch.setenv("GATEWAY_TOOL_API_KEY", "test-key")
+    client = _mock_client(_mock_response({"evidence": []}))
+    with patch("app.web_search.httpx.AsyncClient", return_value=client):
+        capability = WebSearchCapability(base_url="http://gateway:8080")
+        asyncio.run(capability.execute(CapabilityRequest(
+            capability=CapabilityType.WEB_SEARCH,
+            input={"query": "test"},
+        )))
+    assert client.post.await_args.kwargs["headers"] == {"Authorization": "Bearer test-key"}
+
+
+def test_explicit_official_query_filters_to_server_mapped_domain(monkeypatch):
+    monkeypatch.setenv(
+        "CORPORATE_AI_OFFICIAL_DOMAIN_MAP",
+        '{"апис":["apis.bg"]}',
+    )
+    response = _mock_response({"retrieval_status": "FOUND", "evidence": [
+        {"url": "https://www.apis.bg/bg/ceni", "content": "official"},
+        {"url": "https://web.apis.bg/prices", "content": "official subdomain"},
+        {"url": "https://abo.cent.bg/apis", "content": "third party"},
+        {"url": "https://notapis.bg/fake", "content": "lookalike"},
+    ]})
+    client = _mock_client(response)
+    with patch("app.web_search.httpx.AsyncClient", return_value=client):
+        result = asyncio.run(WebSearchCapability(base_url="http://gateway:8080").execute(
+            CapabilityRequest(
+                capability=CapabilityType.WEB_SEARCH,
+                input={"query": "Актуални цени от официалния сайт на АПИС"},
+            )
+        ))
+    assert result.success is True
+    assert [item["url"] for item in result.data["evidence"]] == [
+        "https://www.apis.bg/bg/ceni",
+        "https://web.apis.bg/prices",
+    ]
+    assert client.post.await_args.kwargs["json"]["query"].endswith("site:apis.bg")
+
+
+def test_official_query_without_server_mapping_returns_no_evidence(monkeypatch):
+    monkeypatch.setenv("CORPORATE_AI_OFFICIAL_DOMAIN_MAP", '{"apis":["apis.bg"]}')
+    client = _mock_client(_mock_response({"retrieval_status": "FOUND", "evidence": [
+        {"url": "https://python.org/downloads/", "content": "result"},
+    ]}))
+    with patch("app.web_search.httpx.AsyncClient", return_value=client):
+        result = asyncio.run(WebSearchCapability(base_url="http://gateway:8080").execute(
+            CapabilityRequest(
+                capability=CapabilityType.WEB_SEARCH,
+                input={"query": "Latest official Python stable version"},
+            )
+        ))
+    assert result.success is True
+    assert result.data["evidence"] == []
+    assert result.data["retrieval_status"] == "NO_OFFICIAL_DOMAIN_MAPPING"
+    client.post.assert_not_awaited()
 
 
 def test_web_search_rejects_missing_query():
