@@ -1,0 +1,26 @@
+services:
+  corporate-ai-orchestrator:
+    build:
+      context: ../../services/ai-orchestrator
+    container_name: corporate-ai-orchestrator-0.1.0
+    restart: unless-stopped
+    environment:
+      QWEN_BASE_URL: "http://corporate-ai-qwen36:8000/v1"
+      QWEN_MODEL: "qwen36"
+      KNOWLEDGE_ENGINE_URL: "http://corporate-ai-knowledge-engine-0.3.1-test:8090"
+      GATEWAY_URL: "http://corporate-ai-gateway-0.3.3:8080"
+      WEB_SEARCH_URL: "http://corporate-ai-searxng:8080"
+      TIMEOUT_SECONDS: "120"
+    networks:
+      - ai-net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+
+networks:
+  ai-net:
+    external: true
