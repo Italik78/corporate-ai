@@ -8,6 +8,7 @@ from .conflict import ConflictAnalysisResult, analyze_conflicts
 from .verification import verify_evidence_support
 from .semantic_verification import (
     SemanticVerificationStatus,
+    verify_answer_semantically,
     verify_claims_semantically,
 )
 from .synthesis import build_synthesis_messages, parse_synthesis_result
@@ -495,6 +496,38 @@ class Orchestrator:
                 verification.reason = (
                     "Evidence traceability and semantic verification checks passed."
                 )
+
+                try:
+                    answer_semantic_result = await verify_answer_semantically(
+                        task=task,
+                        answer=synthesis.answer,
+                        claims=synthesis.material_claims,
+                        evidence=evaluation.applicable,
+                        budget=budget,
+                        registry=self.registry,
+                    )
+                except (BudgetExceeded, RuntimeError, ValueError) as exc:
+                    verification.semantic_errors.append(
+                        f"Final answer semantic verification failed: {exc}"
+                    )
+                    verification.passed = False
+                    verification.reason = (
+                        "Final answer semantic verification failed."
+                    )
+                else:
+                    if (
+                        answer_semantic_result.status
+                        != SemanticVerificationStatus.SUPPORTED
+                    ):
+                        verification.semantic_errors.append(
+                            "Final answer semantic verification: "
+                            f"{answer_semantic_result.status.value}: "
+                            f"{answer_semantic_result.reason}"
+                        )
+                        verification.passed = False
+                        verification.reason = (
+                            "Final answer semantic verification failed."
+                        )
 
         if synthesis.resolution == QuestionResolution.AMBIGUOUS:
             task.state = TaskState.CLARIFICATION_REQUIRED
