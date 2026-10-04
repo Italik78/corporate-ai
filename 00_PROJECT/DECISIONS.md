@@ -97,3 +97,16 @@
 72. The final response may be a direct answer, conditional answer, partial answer, clarification request or controlled no-answer depending on the evidence state.
 73. The system must preserve workflow traceability without exposing private model chain-of-thought.
 74. Implementation will reuse the current Gateway, Knowledge Engine, Document Ingestion, Qdrant, PostgreSQL, controlled Web Search, Tool Policy and Qwen3.6 rather than replacing them with a separate platform.
+
+## 2026-10-04 — Conversation & Context Management
+
+75. Adopt `01_ARCHITECTURE/CONVERSATION_CONTEXT_MANAGEMENT.md` as the authoritative architecture for persistent conversation history, conversation state, contextual memory, milestones and dynamic LLM context construction.
+76. Complete conversation history is persistent and must be separated from the bounded Working Context sent to the LLM.
+77. Conversation State, Conversation Memory and Conversation Milestones are separate concepts and must not be collapsed into raw chat history or Corporate Knowledge.
+78. PostgreSQL is the authoritative store for structured conversation history/state/memory/milestone records. Qdrant may provide derived semantic retrieval indexes but is not the authoritative memory store.
+79. Corporate Knowledge evidence, Web evidence, Tool results and Conversation Memory are separate provenance classes and must remain distinguishable.
+80. The Context Manager must build context dynamically from mandatory policy, conversation state, relevant history, memory, Corporate Knowledge evidence, Web evidence and tool results under an explicit token budget.
+81. Qwen3.6 262144 context remains a capability ceiling. The default operating target is 24K–32K tokens for normal corporate chat, with adaptive expansion for complex tasks.
+82. Large tool/web outputs must be persisted or summarized rather than appended indefinitely to conversation context.
+83. Memory conflicts must not be silently resolved by recency, embedding similarity or model confidence alone.
+84. Context construction and memory updates must preserve provenance and must not expose or persist private model chain-of-thought.
