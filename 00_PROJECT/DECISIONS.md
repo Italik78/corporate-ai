@@ -110,3 +110,18 @@
 82. Large tool/web outputs must be persisted or summarized rather than appended indefinitely to conversation context.
 83. Memory conflicts must not be silently resolved by recency, embedding similarity or model confidence alone.
 84. Context construction and memory updates must preserve provenance and must not expose or persist private model chain-of-thought.
+
+
+## 2026-10-04 — AI Brain / Intelligent Orchestration
+
+85. The AI Orchestrator will evolve from predominantly deterministic task classification/planning into an **AI Brain + deterministic Control Plane** architecture.
+86. The LLM Brain may understand, plan, select among authorized capabilities, evaluate evidence and request bounded re-planning, but it must never bypass security, authorization, tool policy, budgets or state validation.
+87. Brain decisions must use a strict structured Decision Contract validated by Pydantic. Free-form model output must never be executed directly.
+88. The deterministic Control Plane remains responsible for capability authorization, schema validation, dependency validation, budget enforcement, state transitions and execution.
+89. Gateway capability authorization and Orchestrator capability selection are separate concerns. The client must not be able to elevate its own source/capability policy.
+90. Standard Corporate AI operation must support server-side modes for INTERNAL_ONLY, INTERNAL_FIRST_WEB_FALLBACK, EXPLICIT_WEB and RESTRICTED_OFFLINE.
+91. The existing deterministic classifier/planner remains a safe fallback until Brain-driven orchestration passes the acceptance matrix.
+92. Brain re-planning is a first-class workflow capability after insufficient evidence, conflicts, failed verification or missing applicability.
+93. Brain traceability must preserve decisions, selected capabilities, evidence references, budgets and outcomes without persisting or exposing private model chain-of-thought.
+94. The implementation plan is documented in `01_ARCHITECTURE/AI_BRAIN_IMPLEMENTATION_PLAN.md`; the controlled implementation prompt is `99_MANAGEMENT/AI_BRAIN_NEW_CHAT_PROMPT.md`.
+95. The first implementation milestone is Brain Decision Contract v1 + Control Plane validator. Production routing must not be switched to Brain-driven behavior before this contract is validated.
