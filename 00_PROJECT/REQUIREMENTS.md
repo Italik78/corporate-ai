@@ -83,3 +83,22 @@ Retrieval score alone must not determine truth.
 - access-aware retrieval
 - bounded resource usage for large-document processing
 - reproducible deployments
+
+
+## Conversation / Context Management
+- persistent complete conversation history independent of active LLM context;
+- compact conversation state for active topic, task, constraints, decisions and open questions;
+- structured contextual memory with provenance, confidence and lifecycle;
+- persistent conversation milestones for important decisions and events;
+- dynamic context selection rather than fixed sliding-window history;
+- model-aware token counting and explicit context budget;
+- adaptive context targets with 24K–32K as the normal operating range for Qwen3.6 corporate chat;
+- bounded expansion up to 64K–128K for complex/large-document tasks and up to the configured 262K capability only for exceptional cases;
+- explicit output reserve in every context budget;
+- deterministic/policy-controlled context assembly;
+- separate provenance for user statements, conversation memory, corporate evidence, web evidence and tool results;
+- memory lifecycle and conflict handling;
+- context-run telemetry showing selected and excluded context components;
+- protection against cross-conversation memory leakage;
+- no persistence or exposure of private model chain-of-thought;
+- large tool and web results stored as artifacts or structured results rather than indefinitely appended to chat context.
