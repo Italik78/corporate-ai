@@ -62,6 +62,10 @@ DOCUMENT_INGESTION_URL = os.getenv(
     "DOCUMENT_INGESTION_URL",
     "http://corporate-ai-document-ingestion:8095",
 ).rstrip("/")
+ORCHESTRATOR_URL = os.getenv(
+    "ORCHESTRATOR_URL",
+    "http://corporate-ai-orchestrator-0.1.0:8097",
+).rstrip("/")
 GATEWAY_API_KEY = os.getenv("GATEWAY_API_KEY", "")
 CORPORATE_AI_TIMEZONE = os.getenv("CORPORATE_AI_TIMEZONE", "Europe/Sofia")
 LOCAL_TIMEZONE = ZoneInfo(CORPORATE_AI_TIMEZONE)
@@ -120,6 +124,28 @@ def latest_user_message(messages: list[ChatMessage]) -> str:
 
 def messages_to_openai(messages: list[ChatMessage]) -> list[dict[str, Any]]:
     return [{"role": m.role, "content": m.content} for m in messages]
+
+
+async def run_orchestrator(
+    question: str,
+    messages: list[ChatMessage],
+) -> dict[str, Any]:
+    payload = {
+        "user_request": question,
+        "messages": messages_to_openai(messages),
+        "source_policy": ["CORPORATE"],
+    }
+
+    async with httpx.AsyncClient(
+        timeout=TIMEOUT,
+        trust_env=False,
+    ) as client:
+        response = await client.post(
+            f"{ORCHESTRATOR_URL}/v1/orchestrate",
+            json=payload,
+        )
+        response.raise_for_status()
+        return response.json()
 
 
 def openai_response(content: str, model: str, metadata: dict[str, Any]):
@@ -1495,29 +1521,55 @@ async def chat_completions(request: ChatRequest, http_request: Request):
             "sources": [],
         }
     else:
-        # Use conversation context to resolve follow-up questions before retrieval.
-        # Previous assistant messages are context only, never evidence.
-        query = await rewrite_retrieval_query(request.messages)
-        result = await run_query(query)
-        metadata = metadata_from_rag(result, route_reason)
-        evidence_status = str(result.get("evidence_status") or "").upper()
-        answer_status = str(result.get("answer_status") or "").upper()
+        orchestrator_result = await run_orchestrator(
+            question,
+            request.messages,
+        )
 
-        # Safety gate: the model is never asked to synthesize unresolved evidence.
-        if evidence_status == "CONFLICT":
-            answer = result.get(
+        answer = str(
+            orchestrator_result.get(
                 "answer",
-                "В предоставените документи има противоречива информация. Не е избран източник като верен.",
+                "Не беше получен надежден отговор от AI Orchestrator.",
             )
-        elif evidence_status != "SUPPORTED" or answer_status == "NO_ANSWER":
-            answer = result.get(
-                "answer",
-                "Няма достатъчно доказателства в предоставените документи, за да дам надежден отговор.",
-            )
-        else:
-            answer, grounded = await synthesize_grounded_answer(request, question, result)
-            metadata["grounded"] = grounded
-            metadata["answer_status"] = "GROUNDED" if grounded else "NO_ANSWER"
+        )
+
+        orchestrator_answer_status = str(
+            orchestrator_result.get("answer_status") or "NO_ANSWER"
+        ).upper()
+        orchestrator_evidence_status = str(
+            orchestrator_result.get("evidence_status") or "INSUFFICIENT_EVIDENCE"
+        ).upper()
+        resolution = str(
+            orchestrator_result.get("resolution") or "INSUFFICIENT"
+        ).upper()
+
+        metadata = {
+            "gateway_version": VERSION,
+            "route": "orchestrator",
+            "route_reason": route_reason,
+            "grounded": orchestrator_answer_status == "GROUNDED",
+            "answer_status": orchestrator_answer_status,
+            "evidence_status": orchestrator_evidence_status,
+            "resolution": resolution,
+            "evidence_claims": orchestrator_result.get("citations", []),
+            "evidence_reason": None,
+            "sources": [
+                {
+                    "evidence_id": item.get("evidence_id"),
+                    "source_class": item.get("source_class"),
+                    "source_id": item.get("source_id"),
+                    "source_location": item.get("source_location"),
+                    "authority": item.get("authority"),
+                    "version": item.get("version"),
+                }
+                for item in orchestrator_result.get("provenance", [])
+                if isinstance(item, dict)
+            ],
+            "task_id": orchestrator_result.get("task_id"),
+            "trace_id": orchestrator_result.get("trace_id"),
+            "clarification": orchestrator_result.get("clarification"),
+            "verification": orchestrator_result.get("verification"),
+        }
 
     body = openai_response(answer, request.model or MODEL_NAME, metadata)
 

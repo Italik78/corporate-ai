@@ -22,6 +22,7 @@ services:
       WEB_SEARCH_BLOCKED_DOMAINS: ""
       WEB_SEARCH_MAX_REDIRECTS: "3"
       WEB_SEARCH_ALLOWED_CONTENT_TYPES: "text/html,application/xhtml+xml,application/json"
+      ORCHESTRATOR_URL: "http://corporate-ai-orchestrator-0.1.0:8097"
     ports:
       - "127.0.0.1:8096:8080"
     networks:
