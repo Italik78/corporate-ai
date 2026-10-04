@@ -379,3 +379,25 @@ Still open:
 - internal-only / offline mode;
 - separate Web Evidence Evaluation layer;
 - Open WebUI upload → Document Ingestion production integration.
+
+
+## 2026-10-04 — Conversation & Context Management architecture
+
+A new first-class module has been accepted at architecture level:
+
+`01_ARCHITECTURE/CONVERSATION_CONTEXT_MANAGEMENT.md`
+
+Scope:
+- persistent complete conversation history;
+- compact Conversation State;
+- structured Conversation Memory;
+- Conversation Milestones;
+- dynamic Context Budget Manager;
+- deterministic Context Builder;
+- provenance-aware memory lifecycle;
+- context-run telemetry;
+- strict separation between conversation memory and Corporate Knowledge evidence.
+
+The Qwen3.6 262144-token context remains a capability ceiling rather than the default working context. Initial operating targets are 24K–32K for normal corporate chat, 32K–64K for complex reasoning and 64K–128K for large-document/multi-source work. Exceptional cases may use the full configured capacity.
+
+Implementation status: architecture accepted, implementation not started. No runtime capability is claimed from this documentation checkpoint.
