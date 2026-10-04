@@ -37,3 +37,16 @@ NVIDIA DGX Dashboard остава системният dashboard. JupyterLab е 
 Работен ред: baseline → inventory → runtime → knowledge → ingestion → RAG/Graph → vision → tools → agent → UI → console → security → backup/recovery → evaluation → production readiness.
 
 При неизвестно се проверява, не се измисля. Българският е основен език.
+
+
+## Conversation & Context Management — architecture accepted 2026-10-04
+
+New authoritative architecture: `01_ARCHITECTURE/CONVERSATION_CONTEXT_MANAGEMENT.md`.
+
+The system must separate complete persistent chat history from the bounded Working Context sent to Qwen3.6. Conversation State, Conversation Memory and Conversation Milestones are distinct layers.
+
+PostgreSQL is authoritative for structured conversation records. Qdrant may index memories and conversation segments for semantic retrieval but is not the memory source of truth.
+
+Normal Qwen3.6 corporate chat targets a 24K–32K working context. The 262144-token model capability is a ceiling and is not the default. Complex tasks may expand the budget to 64K–128K, while exceptional cases may use the full configured capacity.
+
+Corporate Knowledge, Web evidence, Tool results and Conversation Memory remain separate provenance classes. Large tool/web results must be summarized or persisted as artifacts instead of accumulating indefinitely in chat context.
