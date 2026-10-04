@@ -6,6 +6,10 @@ from .evidence import normalize_corporate_evidence, normalize_web_evidence
 from .evidence_evaluation import EvidenceEvaluationResult, evaluate_evidence
 from .conflict import ConflictAnalysisResult, analyze_conflicts
 from .verification import verify_evidence_support
+from .semantic_verification import (
+    SemanticVerificationStatus,
+    verify_claims_semantically,
+)
 from .synthesis import build_synthesis_messages, parse_synthesis_result
 from .retrieval_refinement import (
     build_refinement_messages,
@@ -15,7 +19,18 @@ from .web_research import (
     build_web_fetch_selection_messages,
     parse_web_fetch_selection,
 )
-from .models import CapabilityType, EvidenceStatus, Plan, PlanStep, QuestionResolution, StepStatus, SynthesisResult, Task, TaskState
+from .models import (
+    CapabilityType,
+    EvidenceStatus,
+    Plan,
+    PlanStep,
+    QuestionResolution,
+    SemanticVerificationItem,
+    StepStatus,
+    SynthesisResult,
+    Task,
+    TaskState,
+)
 from .planner import build_plan
 from .retrieval_strategy import merge_unique_candidates
 from .registry import CapabilityRegistry
@@ -114,7 +129,7 @@ class Orchestrator:
                 input={
                     "messages": build_synthesis_messages(task, evidence),
                     "temperature": 0.0,
-                    "max_tokens": 1000,
+                    "max_tokens": 10000,
                     "response_format": {"type": "json_object"},
                 },
             )
@@ -123,10 +138,18 @@ class Orchestrator:
         if not result.success:
             raise RuntimeError(result.error or "LLM synthesis failed")
 
-        return parse_synthesis_result(
-            answer=result.data["content"],
-            evidence=evidence,
-        )
+        try:
+            return parse_synthesis_result(
+                answer=result.data["content"],
+                evidence=evidence,
+            )
+        except ValueError as exc:
+            finish_reason = result.data.get("finish_reason")
+            usage = result.data.get("usage")
+            raise RuntimeError(
+                f"Synthesis JSON validation failed "
+                f"(finish_reason={finish_reason}, usage={usage}): {exc}"
+            ) from exc
 
     def create_plan(self, task: Task) -> Plan:
         task.state = TaskState.UNDERSTANDING
@@ -425,6 +448,53 @@ class Orchestrator:
             citations=synthesis.evidence_ids,
             conflict_errors=conflict_errors,
         )
+
+        semantic_results = []
+        semantic_errors = []
+
+        if (
+            synthesis.resolution == QuestionResolution.ANSWERABLE
+            and verification.passed
+        ):
+            try:
+                semantic_results = await verify_claims_semantically(
+                    task=task,
+                    claims=synthesis.material_claims,
+                    evidence=evaluation.applicable,
+                    budget=budget,
+                    registry=self.registry,
+                )
+            except (BudgetExceeded, RuntimeError, ValueError) as exc:
+                semantic_errors.append(str(exc))
+
+            verification.semantic_results = [
+                SemanticVerificationItem(
+                    claim_index=index,
+                    status=result.status.value,
+                    reason=result.reason,
+                )
+                for index, result in enumerate(semantic_results)
+            ]
+            verification.semantic_errors = semantic_errors
+
+            semantic_failed = (
+                bool(semantic_errors)
+                or len(semantic_results) != len(synthesis.material_claims)
+                or any(
+                    result.status != SemanticVerificationStatus.SUPPORTED
+                    for result in semantic_results
+                )
+            )
+
+            if semantic_failed:
+                verification.passed = False
+                verification.reason = (
+                    "Semantic evidence verification failed."
+                )
+            else:
+                verification.reason = (
+                    "Evidence traceability and semantic verification checks passed."
+                )
 
         if synthesis.resolution == QuestionResolution.AMBIGUOUS:
             task.state = TaskState.CLARIFICATION_REQUIRED

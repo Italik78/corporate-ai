@@ -97,5 +97,6 @@ class LLMReasoningCapability(Capability):
                 "content": content,
                 "model": data.get("model", self.model),
                 "usage": data.get("usage"),
+                "finish_reason": choices[0].get("finish_reason"),
             },
         )

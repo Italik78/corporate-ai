@@ -188,6 +188,12 @@ class SynthesisResult(BaseModel):
     uncertainty: str | None = None
 
 
+class SemanticVerificationItem(BaseModel):
+    claim_index: int
+    status: str
+    reason: str
+
+
 class VerificationResult(BaseModel):
     passed: bool
     material_claims_checked: int = 0
@@ -195,6 +201,10 @@ class VerificationResult(BaseModel):
     invalid_citations: list[str] = Field(default_factory=list)
     applicability_errors: list[str] = Field(default_factory=list)
     conflict_errors: list[str] = Field(default_factory=list)
+    semantic_results: list[SemanticVerificationItem] = Field(
+        default_factory=list
+    )
+    semantic_errors: list[str] = Field(default_factory=list)
     reason: str | None = None
 
 
