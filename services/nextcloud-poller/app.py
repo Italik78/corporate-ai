@@ -161,9 +161,28 @@ def load_state() -> dict:
 
 def save_state(state: dict) -> None:
     temporary = f"{STATE_FILE}.tmp"
-    with open(temporary, "w", encoding="utf-8") as handle:
-        json.dump(state, handle, ensure_ascii=False, indent=2)
-    os.replace(temporary, STATE_FILE)
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, STATE_FILE)
+        directory_fd = os.open(os.path.dirname(STATE_FILE) or ".", os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def has_changed(state: dict, file_info: dict) -> bool:
+    """Whether an ETag differs from the last successfully completed poll."""
+    return state.get(file_info["href"]) != file_info["etag"]
 
 
 async def ingest_file(client: httpx.AsyncClient, file_info: dict) -> None:
@@ -247,7 +266,7 @@ async def run() -> None:
                     state_key = file_info["href"]
                     current_etag = file_info["etag"]
 
-                    if state.get(state_key) == current_etag:
+                    if not has_changed(state, file_info):
                         log.info(
                             "Skipping unchanged filename=%s etag=%s",
                             file_info["filename"],

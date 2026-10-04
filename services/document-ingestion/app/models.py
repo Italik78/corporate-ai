@@ -14,6 +14,7 @@ class DocumentStatus(str, Enum):
     DEDUPLICATING = "DEDUPLICATING"
     CHUNKING = "CHUNKING"
     INDEXING = "INDEXING"
+    RECOVERING = "RECOVERING"
     READY = "READY"
     FAILED_SECURITY = "FAILED_SECURITY"
     FAILED_PARSING = "FAILED_PARSING"
@@ -86,6 +87,9 @@ class Chunk(BaseModel):
     effective_from: str | None = None
     effective_to: str | None = None
     project_id: str | None = None
+    classification: str = "INTERNAL"
+    canonical_source_verified: bool = False
+    canonical_storage_key: str | None = None
     access_scope: str = "INTERNAL"
     page: int | None = None
     page_type: str = "TEXT"

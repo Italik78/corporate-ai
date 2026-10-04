@@ -1,9 +1,10 @@
 import hashlib
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 
 from app.claims import ClaimsEngine
+from app.auth import ServicePrincipal, service_auth
 from app.embedding import EmbeddingClient
 from app.evidence import EvidenceEngine, EvidenceStatus
 from app.llm import LLMClient
@@ -88,7 +89,24 @@ async def health():
 
 
 @app.post("/v1/ingest", response_model=IngestResponse)
-async def ingest(request: IngestRequest):
+async def ingest(
+    request: IngestRequest,
+    principal: ServicePrincipal = Depends(service_auth("ingest")),
+):
+    if request.lifecycle_status != "INGESTING":
+        raise HTTPException(status_code=403, detail="LIFECYCLE_MUST_BE_INGESTING")
+    if request.canonical_source_verified is not True:
+        raise HTTPException(status_code=403, detail="CANONICAL_SOURCE_NOT_VERIFIED")
+    if request.access_scope not in principal.access_scopes:
+        raise HTTPException(status_code=403, detail="ACCESS_SCOPE_NOT_AUTHORIZED")
+    if request.classification not in principal.classifications:
+        raise HTTPException(status_code=403, detail="CLASSIFICATION_NOT_AUTHORIZED")
+    if (
+        request.project_id is not None
+        and "*" not in principal.project_ids
+        and request.project_id not in principal.project_ids
+    ):
+        raise HTTPException(status_code=403, detail="PROJECT_NOT_AUTHORIZED")
     content = request.content.strip()
 
     identity = (
@@ -108,6 +126,8 @@ async def ingest(request: IngestRequest):
         "effective_to": request.effective_to,
         "project_id": request.project_id,
         "access_scope": request.access_scope,
+        "classification": request.classification,
+        "canonical_source_verified": True,
         "page": request.page,
         "page_type": request.page_type,
         "chunk_type": request.chunk_type,
@@ -146,7 +166,10 @@ async def update_document_lifecycle(
     document_id: str,
     version: int,
     lifecycle_status: str,
+    principal: ServicePrincipal = Depends(service_auth("lifecycle")),
 ):
+    if lifecycle_status not in {"CURRENT", "SUPERSEDED", "ARCHIVED"}:
+        raise HTTPException(status_code=400, detail="INVALID_LIFECYCLE_STATUS")
     try:
         qdrant.set_lifecycle_status(
             document_id=document_id,
@@ -167,7 +190,11 @@ async def update_document_lifecycle(
 
 
 @app.get("/v1/documents/{document_id}/versions/{version}/chunks")
-async def get_document_chunks(document_id: str, version: int):
+async def get_document_chunks(
+    document_id: str,
+    version: int,
+    principal: ServicePrincipal = Depends(service_auth("repository_read")),
+):
     if not document_id.strip():
         raise HTTPException(status_code=400, detail="DOCUMENT_ID_REQUIRED")
     if version < 1:
@@ -177,6 +204,9 @@ async def get_document_chunks(document_id: str, version: int):
         chunks = qdrant.get_document_chunks(
             document_id=document_id,
             version=version,
+            access_scopes=principal.access_scopes,
+            classifications=principal.classifications,
+            project_ids=principal.project_ids,
         )
         return {
             "document_id": document_id,
@@ -191,7 +221,15 @@ async def get_document_chunks(document_id: str, version: int):
 
 
 @app.post("/v1/search", response_model=SearchResponse)
-async def search(request: SearchRequest):
+async def search(
+    request: SearchRequest,
+    principal: ServicePrincipal = Depends(service_auth("search")),
+):
+    lifecycle_status = request.lifecycle_status or "CURRENT"
+    if lifecycle_status == "INGESTING":
+        raise HTTPException(status_code=403, detail="INGESTING_NOT_RETRIEVABLE")
+    if lifecycle_status != "CURRENT" and "historical_read" not in principal.permissions:
+        raise HTTPException(status_code=403, detail="HISTORICAL_READ_NOT_AUTHORIZED")
     try:
         query = request.query.strip()
         vector = await embedding.embed(query)
@@ -201,7 +239,10 @@ async def search(request: SearchRequest):
             score_threshold=request.score_threshold,
             document_id=request.document_id,
             version=request.version,
-            lifecycle_status=request.lifecycle_status,
+            lifecycle_status=lifecycle_status,
+            access_scopes=principal.access_scopes,
+            classifications=principal.classifications,
+            project_ids=principal.project_ids,
         )
 
         output = []
@@ -239,8 +280,16 @@ async def search(request: SearchRequest):
 
 
 @app.post("/v1/query", response_model=RAGResponse)
-async def query(request: RAGQuery):
+async def query(
+    request: RAGQuery,
+    principal: ServicePrincipal = Depends(service_auth("query")),
+):
     question = request.question.strip()
+    lifecycle_status = request.lifecycle_status or "CURRENT"
+    if lifecycle_status == "INGESTING":
+        raise HTTPException(status_code=403, detail="INGESTING_NOT_RETRIEVABLE")
+    if lifecycle_status != "CURRENT" and "historical_read" not in principal.permissions:
+        raise HTTPException(status_code=403, detail="HISTORICAL_READ_NOT_AUTHORIZED")
 
     try:
         vector = await embedding.embed(question)
@@ -250,7 +299,10 @@ async def query(request: RAGQuery):
             score_threshold=request.score_threshold,
             document_id=request.document_id,
             version=request.version,
-            lifecycle_status=request.lifecycle_status,
+            lifecycle_status=lifecycle_status,
+            access_scopes=principal.access_scopes,
+            classifications=principal.classifications,
+            project_ids=principal.project_ids,
         )
 
         if not results:

@@ -4,7 +4,11 @@ import hashlib
 import pytest
 
 from app import repository as repository_module
-from app.models import DocumentMetadata, LifecycleStatus
+from app.models import DocumentMetadata, DocumentVersionResponse, LifecycleStatus
+from app.models import Chunk
+from app.knowledge_client import KnowledgeEngineClient
+from app.config import settings
+from app.reconciliation import ReconciliationState, inspect_canonical_source
 from app.storage import CanonicalStorageError, FilesystemCanonicalStorage
 
 
@@ -56,6 +60,141 @@ def test_filesystem_storage_delete(tmp_path):
 
     with pytest.raises(CanonicalStorageError, match="CANONICAL_SOURCE_NOT_FOUND"):
         storage.read("repo-test-001", 1, "source.pdf")
+
+
+def test_filesystem_storage_verifies_persisted_key_and_hash(tmp_path):
+    storage = FilesystemCanonicalStorage(tmp_path)
+    data = b"verified source"
+    digest = hashlib.sha256(data).hexdigest()
+    key = storage.store("repo-test-001", 1, "source.pdf", data, digest)
+
+    assert storage.verify_key(key, digest) == data
+    with pytest.raises(CanonicalStorageError, match="CANONICAL_CONTENT_HASH_MISMATCH"):
+        storage.verify_key(key, hashlib.sha256(b"other").hexdigest())
+    with pytest.raises(CanonicalStorageError, match="INVALID_STORAGE_KEY"):
+        storage.read_key("../../etc/passwd")
+
+
+def _version_response(*, key: str | None, lifecycle: LifecycleStatus, data_hash: str):
+    return DocumentVersionResponse(
+        document_id="repo-test-001",
+        version=1,
+        source_file="source.pdf",
+        content_hash=data_hash,
+        canonical_storage_key=key,
+        source_system="upload",
+        title="test",
+        classification="INTERNAL",
+        language="bg",
+        lifecycle_status=lifecycle,
+        access_scope="INTERNAL",
+        created_at="2026-09-23T00:00:00+00:00",
+        updated_at="2026-09-23T00:00:00+00:00",
+    )
+
+
+def test_reconciliation_classifies_missing_key_as_legacy(tmp_path):
+    source_hash = hashlib.sha256(b"legacy").hexdigest()
+    version = _version_response(
+        key=None,
+        lifecycle=LifecycleStatus.CURRENT,
+        data_hash=source_hash,
+    )
+
+    result = inspect_canonical_source(version, FilesystemCanonicalStorage(tmp_path))
+
+    assert result.state == ReconciliationState.LEGACY
+    assert result.reason == "CANONICAL_STORAGE_KEY_MISSING"
+
+
+def test_reconciliation_classifies_hash_verified_ingesting_as_repairable(tmp_path):
+    storage = FilesystemCanonicalStorage(tmp_path)
+    source = b"replayable source"
+    source_hash = hashlib.sha256(source).hexdigest()
+    key = storage.store("repo-test-001", 1, "source.pdf", source, source_hash)
+    version = _version_response(
+        key=key,
+        lifecycle=LifecycleStatus.INGESTING,
+        data_hash=source_hash,
+    )
+
+    result = inspect_canonical_source(version, storage)
+
+    assert result.state == ReconciliationState.REPAIRABLE
+    assert result.reason == "CANONICAL_SOURCE_VERIFIED_REPLAYABLE"
+
+
+def test_reconciliation_classifies_missing_key_target_as_invalid(tmp_path):
+    version = _version_response(
+        key="documents/repo-test-001/original/1/source.pdf",
+        lifecycle=LifecycleStatus.CURRENT,
+        data_hash=hashlib.sha256(b"missing").hexdigest(),
+    )
+
+    result = inspect_canonical_source(version, FilesystemCanonicalStorage(tmp_path))
+
+    assert result.state == ReconciliationState.INVALID
+    assert result.reason == "CANONICAL_SOURCE_NOT_FOUND"
+
+
+def test_repository_repairs_key_only_when_predicted_source_hash_matches(
+    monkeypatch, tmp_path
+):
+    storage = FilesystemCanonicalStorage(tmp_path)
+    source = b"source bytes survived key persistence failure"
+    digest = hashlib.sha256(source).hexdigest()
+    candidate = storage.store("repo-test-001", 1, "source.pdf", source, digest)
+    version = _version_response(
+        key=None,
+        lifecycle=LifecycleStatus.CURRENT,
+        data_hash=digest,
+    )
+    calls = []
+
+    async def fake_get(document_id, version_number):
+        calls.append(("get", document_id, version_number))
+        if version.canonical_storage_key:
+            return version
+        return version
+
+    async def fake_set(document_id, version_number, key):
+        calls.append(("set", document_id, version_number, key))
+        version.canonical_storage_key = key
+
+    monkeypatch.setattr(repository_module, "get_version", fake_get)
+    monkeypatch.setattr(repository_module, "set_canonical_storage_key", fake_set)
+    repo = repository_module.PostgresRepository(storage=storage)
+
+    result = asyncio.run(repo.repair_missing_canonical_key("repo-test-001", 1))
+
+    assert candidate == result.canonical_storage_key
+    assert result.state == ReconciliationState.VALID
+    assert calls[1] == ("set", "repo-test-001", 1, candidate)
+
+
+def test_finalize_rejects_version_without_verified_canonical_bytes(
+    monkeypatch, tmp_path
+):
+    version = _version_response(
+        key=None,
+        lifecycle=LifecycleStatus.INGESTING,
+        data_hash=hashlib.sha256(b"not present").hexdigest(),
+    )
+
+    async def fake_get(document_id, version_number):
+        return version
+
+    async def fake_finalize(*args):
+        raise AssertionError("finalize must not be reached")
+
+    monkeypatch.setattr(repository_module, "get_version", fake_get)
+    monkeypatch.setattr(repository_module, "finalize_version", fake_finalize)
+    repo = repository_module.PostgresRepository(
+        storage=FilesystemCanonicalStorage(tmp_path)
+    )
+
+    with pytest.raises(repository_module.RepositoryError, match="LEGACY"):
+        asyncio.run(repo.finalize_version("repo-test-001", 1))
 
 
 def test_postgres_repository_delegates_register_version(monkeypatch):
@@ -198,10 +337,27 @@ def test_postgres_repository_delegates_lifecycle_operations(monkeypatch):
         calls.append(("get", document_id, version))
         return None
 
+    async def fake_inspect(self, document_id, version):
+        from app.reconciliation import VersionIntegrity
+
+        return VersionIntegrity(
+            state=ReconciliationState.REPAIRABLE,
+            document_id=document_id,
+            version=version,
+            lifecycle_status="INGESTING",
+            canonical_storage_key="documents/repo-test-001/original/2/source.txt",
+            reason="CANONICAL_SOURCE_VERIFIED_REPLAYABLE",
+        )
+
     monkeypatch.setattr(repository_module, "finalize_version", fake_finalize)
     monkeypatch.setattr(repository_module, "fail_version", fake_fail)
     monkeypatch.setattr(repository_module, "list_versions", fake_list)
     monkeypatch.setattr(repository_module, "get_version", fake_get)
+    monkeypatch.setattr(
+        repository_module.PostgresRepository,
+        "inspect_version_integrity",
+        fake_inspect,
+    )
 
     repo = repository_module.PostgresRepository()
 
@@ -222,7 +378,24 @@ def test_postgres_repository_maps_lifecycle_metadata_errors(monkeypatch):
     async def fake_finalize(*args):
         raise repository_module.MetadataError("lifecycle failure")
 
+    async def fake_inspect(self, document_id, version):
+        from app.reconciliation import VersionIntegrity
+
+        return VersionIntegrity(
+            state=ReconciliationState.REPAIRABLE,
+            document_id=document_id,
+            version=version,
+            lifecycle_status="INGESTING",
+            canonical_storage_key="documents/repo-test-001/original/1/source.pdf",
+            reason="CANONICAL_SOURCE_VERIFIED_REPLAYABLE",
+        )
+
     monkeypatch.setattr(repository_module, "finalize_version", fake_finalize)
+    monkeypatch.setattr(
+        repository_module.PostgresRepository,
+        "inspect_version_integrity",
+        fake_inspect,
+    )
 
     with pytest.raises(repository_module.RepositoryError, match="lifecycle failure"):
         asyncio.run(
@@ -235,3 +408,44 @@ def test_postgres_repository_maps_lifecycle_metadata_errors(monkeypatch):
 def test_repository_contract_exposes_lifecycle_status_model():
     metadata = _metadata()
     assert metadata.lifecycle_status is LifecycleStatus.INGESTING
+
+
+def test_knowledge_engine_client_sends_auth_and_classification(monkeypatch):
+    calls = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"status": "ok"}
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, **kwargs):
+            calls.update(url=url, **kwargs)
+            return Response()
+
+    monkeypatch.setattr(settings, "knowledge_engine_token", "test-ingestion-token")
+    monkeypatch.setattr("app.knowledge_client.httpx.AsyncClient", Client)
+
+    chunk = Chunk(
+        chunk_id="doc:v1:chunk:00001",
+        document_id="doc",
+        source_file="source.txt",
+        content="protected",
+        classification="CONFIDENTIAL",
+    )
+    result = asyncio.run(KnowledgeEngineClient().ingest(chunk))
+
+    assert result == {"status": "ok"}
+    assert calls["headers"] == {"Authorization": "Bearer test-ingestion-token"}
+    assert calls["json"]["classification"] == "CONFIDENTIAL"

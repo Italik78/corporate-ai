@@ -8,6 +8,11 @@ class KnowledgeEngineClient:
     def __init__(self, base_url: str | None = None):
         self.base_url = (base_url or settings.knowledge_engine_url).rstrip("/")
 
+    @staticmethod
+    def _headers() -> dict[str, str]:
+        token = settings.knowledge_engine_token.strip()
+        return {"Authorization": f"Bearer {token}"} if token else {}
+
     async def ingest(self, chunk: Chunk) -> dict:
         payload = {
             "document_id": chunk.document_id,
@@ -18,7 +23,10 @@ class KnowledgeEngineClient:
             "effective_from": chunk.effective_from,
             "effective_to": chunk.effective_to,
             "project_id": chunk.project_id,
-            "access_scope": chunk.access_scope,
+            "access_scope": chunk.access_scope or "INTERNAL",
+            "classification": getattr(chunk, "classification", None) or "INTERNAL",
+            "canonical_source_verified": chunk.canonical_source_verified is True,
+            "canonical_storage_key": chunk.canonical_storage_key,
             "content": chunk.content,
             "page": chunk.page,
             "page_type": chunk.page_type,
@@ -29,7 +37,11 @@ class KnowledgeEngineClient:
             "provenance": chunk.provenance,
         }
         async with httpx.AsyncClient(timeout=settings.ingest_timeout_seconds) as client:
-            r = await client.post(f"{self.base_url}/v1/ingest", json=payload)
+            r = await client.post(
+                f"{self.base_url}/v1/ingest",
+                json=payload,
+                headers=self._headers(),
+            )
             r.raise_for_status()
             return r.json()
 
@@ -47,6 +59,7 @@ class KnowledgeEngineClient:
                     "version": version,
                     "lifecycle_status": lifecycle_status,
                 },
+                headers=self._headers(),
             )
             r.raise_for_status()
             return r.json()
@@ -59,10 +72,31 @@ class KnowledgeEngineClient:
         async with httpx.AsyncClient(timeout=settings.ingest_timeout_seconds) as client:
             r = await client.get(
                 f"{self.base_url}/v1/documents/{document_id}/versions/{version}/chunks",
+                headers=self._headers(),
             )
             r.raise_for_status()
             payload = r.json()
             return payload.get("chunks", [])
+
+    async def search(self, payload: dict) -> dict:
+        async with httpx.AsyncClient(timeout=settings.ingest_timeout_seconds) as client:
+            r = await client.post(
+                f"{self.base_url}/v1/search",
+                json=payload,
+                headers=self._headers(),
+            )
+            r.raise_for_status()
+            return r.json()
+
+    async def query(self, payload: dict) -> dict:
+        async with httpx.AsyncClient(timeout=settings.ingest_timeout_seconds) as client:
+            r = await client.post(
+                f"{self.base_url}/v1/query",
+                json=payload,
+                headers=self._headers(),
+            )
+            r.raise_for_status()
+            return r.json()
 
 
     async def health(self) -> bool:

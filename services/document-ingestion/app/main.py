@@ -8,11 +8,22 @@ from .metadata import (
     health as metadata_health,
     initialize_metadata,
     list_versions,
+    update_ingestion_jobs_for_version,
 )
-from .models import DocumentProcessResponse, StatusResponse
+from .models import DocumentProcessResponse, DocumentStatus, StatusResponse
 from .pipeline import get_job, ingest_document
+from .recovery import recover_ingesting_version
+from .repository import RepositoryError, repository
 
 app = FastAPI(title="Corporate AI Document Ingestion Service", version=settings.version)
+
+
+def _authorize_recovery(supplied_token: str | None) -> None:
+    configured = settings.recovery_token
+    if not configured:
+        raise HTTPException(status_code=503, detail="RECOVERY_NOT_CONFIGURED")
+    if not supplied_token or not secrets.compare_digest(supplied_token, configured):
+        raise HTTPException(status_code=401, detail="INVALID_RECOVERY_CREDENTIAL")
 
 
 @app.on_event("startup")
@@ -190,3 +201,86 @@ async def details(ingestion_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="INGEST_NOT_FOUND")
     return {"ingestion_id": ingestion_id, **job}
+
+
+@app.get("/v1/admin/reconciliation/documents/{document_id}/versions/{version}")
+async def reconcile_version(
+    document_id: str,
+    version: int,
+    x_corporate_ai_recovery: str | None = Header(default=None),
+):
+    _authorize_recovery(x_corporate_ai_recovery)
+    try:
+        result = await repository.inspect_version_integrity(document_id, version)
+    except RepositoryError as exc:
+        if str(exc) == "DOCUMENT_VERSION_NOT_FOUND":
+            raise HTTPException(status_code=404, detail="DOCUMENT_VERSION_NOT_FOUND") from exc
+        raise HTTPException(status_code=502, detail="RECONCILIATION_FAILED") from exc
+    return {
+        "document_id": result.document_id,
+        "version": result.version,
+        "lifecycle_status": result.lifecycle_status,
+        "state": result.state.value,
+        "reason": result.reason,
+        "canonical_storage_key": result.canonical_storage_key,
+        "candidate_storage_key": result.candidate_storage_key,
+    }
+
+
+@app.post("/v1/admin/reconciliation/documents/{document_id}/versions/{version}/repair-key")
+async def repair_canonical_key(
+    document_id: str,
+    version: int,
+    x_corporate_ai_recovery: str | None = Header(default=None),
+):
+    _authorize_recovery(x_corporate_ai_recovery)
+    try:
+        result = await repository.repair_missing_canonical_key(document_id, version)
+    except RepositoryError as exc:
+        if str(exc) == "DOCUMENT_VERSION_NOT_FOUND":
+            raise HTTPException(status_code=404, detail="DOCUMENT_VERSION_NOT_FOUND") from exc
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "document_id": result.document_id,
+        "version": result.version,
+        "state": result.state.value,
+        "reason": result.reason,
+        "canonical_storage_key": result.canonical_storage_key,
+    }
+
+
+@app.post("/v1/admin/recovery/documents/{document_id}/versions/{version}")
+async def recover_version(
+    document_id: str,
+    version: int,
+    x_corporate_ai_recovery: str | None = Header(default=None),
+):
+    _authorize_recovery(x_corporate_ai_recovery)
+    try:
+        return await recover_ingesting_version(document_id, version)
+    except RepositoryError as exc:
+        if str(exc) == "DOCUMENT_VERSION_NOT_FOUND":
+            raise HTTPException(status_code=404, detail="DOCUMENT_VERSION_NOT_FOUND") from exc
+        try:
+            await update_ingestion_jobs_for_version(
+                document_id,
+                version,
+                status=DocumentStatus.FAILED_INDEXING.value,
+                error_code="RECOVERY_SOURCE_INVALID",
+                error=str(exc),
+            )
+        except Exception:
+            pass
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        try:
+            await update_ingestion_jobs_for_version(
+                document_id,
+                version,
+                status=DocumentStatus.FAILED_INDEXING.value,
+                error_code="RECOVERY_FAILED",
+                error=str(exc),
+            )
+        except Exception:
+            pass
+        raise HTTPException(status_code=502, detail="RECOVERY_FAILED") from exc

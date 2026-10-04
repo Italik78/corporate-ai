@@ -286,6 +286,18 @@ def test_pipeline_repository_knowledge_critical_path(monkeypatch):
         ):
             calls.append(("set_key", document_id, version, canonical_storage_key))
 
+        async def inspect_version_integrity(self, document_id, version):
+            from app.reconciliation import ReconciliationState, VersionIntegrity
+
+            return VersionIntegrity(
+                state=ReconciliationState.REPAIRABLE,
+                document_id=document_id,
+                version=version,
+                lifecycle_status="INGESTING",
+                canonical_storage_key=f"documents/{document_id}/original/{version}/critical-path.txt",
+                reason="CANONICAL_SOURCE_VERIFIED_REPLAYABLE",
+            )
+
         async def finalize_version(self, document_id, version):
             calls.append(("finalize", document_id, version))
             return DocumentMetadata(
@@ -305,6 +317,8 @@ def test_pipeline_repository_knowledge_critical_path(monkeypatch):
 
     class FakeKnowledgeClient:
         async def ingest(self, chunk):
+            assert chunk.canonical_source_verified is True
+            assert chunk.canonical_storage_key is not None
             calls.append(("index", chunk.document_id, chunk.version))
 
         async def set_lifecycle_status(self, document_id, version, lifecycle_status):
@@ -398,7 +412,7 @@ def test_duplicate_process_reconstructs_document_from_index(monkeypatch):
             "superseded_by": None,
             "project_id": "project-001",
             "access_scope": "INTERNAL",
-            "canonical_storage_key": None,
+            "canonical_storage_key": "documents/existing-001/original/2/existing.txt",
             "content_hash": "same-hash",
         },
     )()
@@ -442,6 +456,26 @@ def test_duplicate_process_reconstructs_document_from_index(monkeypatch):
     monkeypatch.setattr(pipeline, "find_duplicate_version", fake_find_duplicate_version)
     monkeypatch.setattr(pipeline, "KnowledgeEngineClient", FakeKnowledgeClient)
 
+    async def fake_inspect_version_integrity(document_id, version):
+        from app.reconciliation import ReconciliationState, VersionIntegrity
+
+        assert document_id == "existing-001"
+        assert version == 2
+        return VersionIntegrity(
+            state=ReconciliationState.VALID,
+            document_id=document_id,
+            version=version,
+            lifecycle_status="CURRENT",
+            canonical_storage_key=duplicate.canonical_storage_key,
+            reason="CANONICAL_SOURCE_HASH_VERIFIED",
+        )
+
+    monkeypatch.setattr(
+        pipeline.repository,
+        "inspect_version_integrity",
+        fake_inspect_version_integrity,
+    )
+
     result = asyncio.run(
         pipeline.ingest_document(
             filename="incoming.txt",
@@ -479,6 +513,80 @@ def test_duplicate_process_reconstructs_document_from_index(monkeypatch):
     assert ingest_result.indexed_count == 2
     assert ingest_result.page_count is None
     assert "DUPLICATE_CONTENT_REUSED" in ingest_result.warnings
+
+
+def test_index_failure_preserves_canonical_source_for_recovery(monkeypatch):
+    calls = []
+
+    class FakeRepository:
+        async def register_version(self, metadata, source_file, content_hash):
+            metadata.version = 1
+            return metadata
+
+        async def store_canonical_source(
+            self, document_id, version, filename, data, content_hash
+        ):
+            calls.append("store")
+            return f"documents/{document_id}/original/{version}/{filename}"
+
+        async def set_canonical_storage_key(self, *args, **kwargs):
+            calls.append("set-key")
+
+        async def inspect_version_integrity(self, document_id, version):
+            from app.reconciliation import ReconciliationState, VersionIntegrity
+
+            return VersionIntegrity(
+                state=ReconciliationState.REPAIRABLE,
+                document_id=document_id,
+                version=version,
+                lifecycle_status="INGESTING",
+                canonical_storage_key=f"documents/{document_id}/original/{version}/retry.txt",
+                reason="CANONICAL_SOURCE_VERIFIED_REPLAYABLE",
+            )
+
+        async def finalize_version(self, *args, **kwargs):
+            raise AssertionError("failed indexing must not finalize")
+
+        async def delete_canonical_source(self, *args, **kwargs):
+            calls.append("delete")
+
+        async def fail_version(self, *args, **kwargs):
+            calls.append("archive")
+
+    class FakeKnowledgeClient:
+        async def ingest(self, chunk):
+            assert chunk.canonical_source_verified is True
+            calls.append("index")
+            raise RuntimeError("injected qdrant failure")
+
+    async def create_job(**kwargs):
+        return None
+
+    async def update_job(*args, **kwargs):
+        return None
+
+    async def find_duplicate(**kwargs):
+        return None
+
+    monkeypatch.setattr(pipeline, "create_ingestion_job", create_job)
+    monkeypatch.setattr(pipeline, "update_ingestion_job", update_job)
+    monkeypatch.setattr(pipeline, "find_duplicate_version", find_duplicate)
+    monkeypatch.setattr(pipeline, "repository", FakeRepository())
+    monkeypatch.setattr(pipeline, "KnowledgeEngineClient", FakeKnowledgeClient)
+
+    result = asyncio.run(
+        pipeline.ingest_document(
+            filename="retry.txt",
+            data=b"Retain this canonical source after index failure.",
+            document_id="retry-001",
+        )
+    )
+
+    assert result.status == DocumentStatus.FAILED_INDEXING
+    assert result.lifecycle_status == LifecycleStatus.INGESTING
+    assert "store" in calls and "set-key" in calls and "index" in calls
+    assert "delete" not in calls
+    assert "archive" not in calls
 
 
 def test_vision_json_validation():

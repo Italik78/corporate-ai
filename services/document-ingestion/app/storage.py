@@ -22,6 +22,15 @@ class FilesystemCanonicalStorage:
         self.root = Path(root or settings.repository_storage_path).resolve()
 
     @staticmethod
+    def _sync_parent(path: Path) -> None:
+        """Persist the rename's directory entry on filesystems that support it."""
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
+    @staticmethod
     def _safe_component(value: str, field: str) -> str:
         if not value or value in {".", ".."}:
             raise CanonicalStorageError(f"INVALID_{field.upper()}")
@@ -54,6 +63,10 @@ class FilesystemCanonicalStorage:
             raise CanonicalStorageError("INVALID_STORAGE_PATH") from exc
         return path
 
+    def expected_key(self, document_id: str, version: int, filename: str) -> str:
+        """Return the adapter's canonical relative key after path validation."""
+        return str(self._source_path(document_id, version, filename).relative_to(self.root))
+
     def store(
         self,
         document_id: str,
@@ -77,6 +90,7 @@ class FilesystemCanonicalStorage:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, path)
+            self._sync_parent(path)
         except OSError as exc:
             try:
                 temporary.unlink(missing_ok=True)
@@ -118,6 +132,7 @@ class FilesystemCanonicalStorage:
                 raise CanonicalStorageError("CONTENT_HASH_MISMATCH")
 
             os.replace(temporary, path)
+            self._sync_parent(path)
         except CanonicalStorageError:
             raise
         except OSError as exc:
@@ -135,6 +150,74 @@ class FilesystemCanonicalStorage:
             return path.read_bytes()
         except OSError as exc:
             raise CanonicalStorageError("CANONICAL_SOURCE_NOT_FOUND") from exc
+
+    def read_key(self, key: str) -> bytes:
+        """Read an already persisted relative storage key safely.
+
+        Keys are metadata and therefore are treated as untrusted input even
+        when they came from our own database.
+        """
+        path = self._safe_key_path(key)
+        try:
+            return path.read_bytes()
+        except OSError as exc:
+            raise CanonicalStorageError("CANONICAL_SOURCE_NOT_FOUND") from exc
+
+    def verify_key(self, key: str, content_hash: str) -> bytes:
+        data = self.read_key(key)
+        expected_hash = content_hash.removeprefix("sha256:")
+        if hashlib.sha256(data).hexdigest() != expected_hash:
+            raise CanonicalStorageError("CANONICAL_CONTENT_HASH_MISMATCH")
+        return data
+
+    def verify_key_hash(self, key: str, content_hash: str) -> None:
+        path = self._safe_key_path(key)
+        expected_hash = content_hash.removeprefix("sha256:")
+        digest = hashlib.sha256()
+        try:
+            with path.open("rb") as handle:
+                while chunk := handle.read(1024 * 1024):
+                    digest.update(chunk)
+        except OSError as exc:
+            raise CanonicalStorageError("CANONICAL_SOURCE_NOT_FOUND") from exc
+        if digest.hexdigest() != expected_hash:
+            raise CanonicalStorageError("CANONICAL_CONTENT_HASH_MISMATCH")
+
+    def copy_verified_key(
+        self, key: str, content_hash: str, destination: str | Path
+    ) -> None:
+        source = self._safe_key_path(key)
+        target = Path(destination)
+        digest = hashlib.sha256()
+        expected_hash = content_hash.removeprefix("sha256:")
+        try:
+            with source.open("rb") as src, target.open("wb") as dst:
+                while chunk := src.read(1024 * 1024):
+                    digest.update(chunk)
+                    dst.write(chunk)
+                dst.flush()
+                os.fsync(dst.fileno())
+            if digest.hexdigest() != expected_hash:
+                target.unlink(missing_ok=True)
+                raise CanonicalStorageError("CANONICAL_CONTENT_HASH_MISMATCH")
+        except CanonicalStorageError:
+            raise
+        except OSError as exc:
+            target.unlink(missing_ok=True)
+            raise CanonicalStorageError("CANONICAL_SOURCE_NOT_FOUND") from exc
+
+    def _safe_key_path(self, key: str) -> Path:
+        if not key or "\\" in key or "\x00" in key:
+            raise CanonicalStorageError("INVALID_STORAGE_KEY")
+        relative = Path(key)
+        if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+            raise CanonicalStorageError("INVALID_STORAGE_KEY")
+        path = (self.root / relative).resolve()
+        try:
+            path.relative_to(self.root)
+        except ValueError as exc:
+            raise CanonicalStorageError("INVALID_STORAGE_KEY") from exc
+        return path
 
     def delete(self, document_id: str, version: int, filename: str) -> None:
         path = self._source_path(document_id, version, filename)

@@ -11,6 +11,7 @@ services:
       LLM_MODEL: "qwen36"
       QDRANT_URL: "http://corporate-ai-qdrant:6333"
       COLLECTION_NAME: "corporate_knowledge"
+      KNOWLEDGE_ENGINE_SERVICE_CREDENTIALS: "${KNOWLEDGE_ENGINE_SERVICE_CREDENTIALS:?KNOWLEDGE_ENGINE_SERVICE_CREDENTIALS is required}"
     ports:
       - "127.0.0.1:8093:8090"
     networks:

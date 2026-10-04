@@ -1,7 +1,7 @@
 from typing import Any
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import FieldCondition, Filter, MatchValue, PointStruct
+from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue, PointStruct
 
 
 class QdrantStore:
@@ -45,6 +45,10 @@ class QdrantStore:
         self,
         document_id: str,
         version: int,
+        access_scopes: tuple[str, ...],
+        classifications: tuple[str, ...],
+        project_ids: tuple[str, ...],
+        lifecycle_status: str = "CURRENT",
     ) -> list[dict[str, Any]]:
         chunks: list[dict[str, Any]] = []
         offset = None
@@ -55,6 +59,22 @@ class QdrantStore:
                 scroll_filter=Filter(
                     must=[
                         FieldCondition(
+                            key="lifecycle_status",
+                            match=MatchValue(value=lifecycle_status),
+                        ),
+                        FieldCondition(
+                            key="access_scope",
+                            match=MatchAny(any=list(access_scopes)),
+                        ),
+                        FieldCondition(
+                            key="classification",
+                            match=MatchAny(any=list(classifications)),
+                        ),
+                        FieldCondition(
+                            key="canonical_source_verified",
+                            match=MatchValue(value=True),
+                        ),
+                        FieldCondition(
                             key="document_id",
                             match=MatchValue(value=document_id),
                         ),
@@ -62,7 +82,14 @@ class QdrantStore:
                             key="version",
                             match=MatchValue(value=version),
                         ),
-                    ]
+                    ] + (
+                        [] if "*" in project_ids else [
+                            FieldCondition(
+                                key="project_id",
+                                match=MatchAny(any=list(project_ids)),
+                            )
+                        ]
+                    )
                 ),
                 with_payload=True,
                 limit=1000,
@@ -90,21 +117,45 @@ class QdrantStore:
         document_id: str | None = None,
         version: int | None = None,
         lifecycle_status: str | None = None,
+        access_scopes: tuple[str, ...] = (),
+        classifications: tuple[str, ...] = (),
+        project_ids: tuple[str, ...] = (),
     ) -> list[Any]:
-        must = []
+        # Authorization filters are mandatory. Empty values are a programming
+        # or configuration error and must never degrade into unfiltered search.
+        if not access_scopes or not classifications or not project_ids:
+            raise ValueError("authorization filters are required")
+        must = [
+            FieldCondition(
+                key="lifecycle_status",
+                match=MatchValue(value=lifecycle_status or "CURRENT"),
+            ),
+            FieldCondition(
+                key="access_scope",
+                match=MatchAny(any=list(access_scopes)),
+            ),
+            FieldCondition(
+                key="classification",
+                match=MatchAny(any=list(classifications)),
+            ),
+            FieldCondition(
+                key="canonical_source_verified",
+                match=MatchValue(value=True),
+            ),
+        ]
         if document_id is not None:
             must.append(FieldCondition(key="document_id", match=MatchValue(value=document_id)))
         if version is not None:
             must.append(FieldCondition(key="version", match=MatchValue(value=version)))
-        if lifecycle_status is not None:
+        if "*" not in project_ids:
             must.append(
                 FieldCondition(
-                    key="lifecycle_status",
-                    match=MatchValue(value=lifecycle_status),
+                    key="project_id",
+                    match=MatchAny(any=list(project_ids)),
                 )
             )
 
-        query_filter = Filter(must=must) if must else None
+        query_filter = Filter(must=must)
 
         return self.client.query_points(
             collection_name=self.collection,

@@ -61,6 +61,8 @@ class IngestRequest(BaseModel):
     effective_to: str | None = None
     project_id: str | None = None
     access_scope: str = "INTERNAL"
+    classification: str = "INTERNAL"
+    canonical_source_verified: bool = Field(...)
     page: int | None = None
     page_type: str = "TEXT"
     chunk_type: str = "text"

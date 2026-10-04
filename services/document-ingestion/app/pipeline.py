@@ -357,19 +357,56 @@ async def ingest_document(
                 else duplicate.lifecycle_status
             )
 
-            await _update_job(
-                ingestion_id,
-                document_id=duplicate.document_id,
-                version=duplicate.version,
-                status=DocumentStatus.READY,
-                lifecycle_status=duplicate_lifecycle_status,
-            )
+            if duplicate_lifecycle_status == LifecycleStatus.INGESTING:
+                # A retry after an interrupted attempt can complete the same
+                # canonical version. Qdrant point IDs are stable, so replay is
+                # safe even if an earlier attempt indexed only some chunks.
+                from .recovery import recover_ingesting_version
+
+                try:
+                    await recover_ingesting_version(
+                        duplicate.document_id,
+                        duplicate.version,
+                    )
+                    duplicate = await repository.get_version(
+                        duplicate.document_id,
+                        duplicate.version,
+                    )
+                    duplicate_lifecycle_status = (
+                        LifecycleStatus(duplicate.lifecycle_status)
+                        if not isinstance(duplicate.lifecycle_status, LifecycleStatus)
+                        else duplicate.lifecycle_status
+                    )
+                except Exception as exc:
+                    raise RuntimeError("DUPLICATE_RECOVERY_REQUIRED") from exc
+
+            if duplicate_lifecycle_status != LifecycleStatus.CURRENT:
+                raise ValueError("DUPLICATE_VERSION_NOT_CURRENT")
+
+            try:
+                duplicate_integrity = await repository.inspect_version_integrity(
+                    duplicate.document_id,
+                    duplicate.version,
+                )
+                if duplicate_integrity.state.value != "VALID":
+                    raise ValueError(duplicate_integrity.reason)
+            except Exception as exc:
+                raise ValueError("DUPLICATE_CANONICAL_SOURCE_INVALID") from exc
 
             if return_document:
                 client = KnowledgeEngineClient()
                 chunks = await client.get_document_chunks(
                     document_id=duplicate.document_id,
                     version=duplicate.version,
+                )
+                if not chunks:
+                    raise ValueError("DUPLICATE_VERSION_NOT_INDEXED")
+                await _update_job(
+                    ingestion_id,
+                    document_id=duplicate.document_id,
+                    version=duplicate.version,
+                    status=DocumentStatus.READY,
+                    lifecycle_status=duplicate_lifecycle_status,
                 )
                 return _normalized_document_from_chunks(
                     duplicate=duplicate,
@@ -381,6 +418,15 @@ async def ingest_document(
             chunks = await client.get_document_chunks(
                 document_id=duplicate.document_id,
                 version=duplicate.version,
+            )
+            if not chunks:
+                raise ValueError("DUPLICATE_VERSION_NOT_INDEXED")
+            await _update_job(
+                ingestion_id,
+                document_id=duplicate.document_id,
+                version=duplicate.version,
+                status=DocumentStatus.READY,
+                lifecycle_status=duplicate_lifecycle_status,
             )
 
             return IngestResponse(
@@ -480,6 +526,17 @@ async def ingest_document(
             version=registered_version,
             canonical_storage_key=canonical_storage_key,
         )
+        canonical_integrity = await repository.inspect_version_integrity(
+            document_id,
+            registered_version,
+        )
+        if canonical_integrity.state.value != "REPAIRABLE":
+            raise RuntimeError(
+                f"CANONICAL_SOURCE_VERIFICATION_FAILED:{canonical_integrity.reason}"
+            )
+        metadata = metadata.model_copy(
+            update={"canonical_storage_key": canonical_storage_key}
+        )
 
         # register_version() may resolve an automatically assigned version and
         # populate supersedes metadata. Chunk IDs must use the resolved version,
@@ -489,6 +546,8 @@ async def ingest_document(
         await _update_job(ingestion_id, status=DocumentStatus.DEDUPLICATING)
         await _update_job(ingestion_id, status=DocumentStatus.CHUNKING)
         chunks = chunk_document(doc)
+        if not chunks:
+            raise ValueError("EMPTY_INDEXABLE_CONTENT")
 
         for chunk in chunks:
             chunk.version = metadata.version
@@ -497,6 +556,9 @@ async def ingest_document(
             chunk.effective_from = metadata.effective_from
             chunk.effective_to = metadata.effective_to
             chunk.project_id = metadata.project_id
+            chunk.classification = metadata.classification or "INTERNAL"
+            chunk.canonical_source_verified = True
+            chunk.canonical_storage_key = canonical_storage_key
             chunk.access_scope = metadata.access_scope
 
         await _update_job(ingestion_id, status=DocumentStatus.INDEXING)
@@ -506,12 +568,25 @@ async def ingest_document(
             await client.ingest(chunk)
             indexed += 1
 
+        if indexed != len(chunks):
+            raise RuntimeError("INDEX_COUNT_MISMATCH")
+
         superseded_version = None
         if metadata.supersedes and ":v" in metadata.supersedes:
             try:
                 superseded_version = int(metadata.supersedes.rsplit(":v", 1)[1])
             except ValueError:
                 superseded_version = None
+
+        # Remove the previous vector version from retrieval before the
+        # authoritative metadata transaction changes CURRENT. If that write
+        # fails, ingestion aborts while the new version is still INGESTING.
+        if superseded_version is not None and superseded_version != metadata.version:
+            await client.set_lifecycle_status(
+                document_id=document_id,
+                version=superseded_version,
+                lifecycle_status=LifecycleStatus.SUPERSEDED.value,
+            )
 
         finalized = await repository.finalize_version(document_id, metadata.version)
 
@@ -520,13 +595,6 @@ async def ingest_document(
             version=metadata.version,
             lifecycle_status=finalized.lifecycle_status.value,
         )
-
-        if superseded_version is not None and superseded_version != metadata.version:
-            await client.set_lifecycle_status(
-                document_id=document_id,
-                version=superseded_version,
-                lifecycle_status=LifecycleStatus.SUPERSEDED.value,
-            )
         await _update_job(
             ingestion_id,
             status=DocumentStatus.READY,
@@ -597,12 +665,9 @@ async def ingest_document(
             if code in {"INVALID_FILENAME", "FILE_TOO_LARGE", "UNSUPPORTED_FILE_TYPE"}
             else DocumentStatus.FAILED_PARSING
         )
-        if registered_version is not None:
-            await repository.fail_version(document_id, registered_version)
-        if canonical_storage_key is not None:
-            await repository.delete_canonical_source(
-                document_id, registered_version, filename
-            )
+        # Keep a registered version and its canonical source available for
+        # explicit replay/reconciliation. Never delete the only source bytes
+        # when a later stage fails.
         await _update_job(
             ingestion_id,
             document_id=document_id,
@@ -615,7 +680,11 @@ async def ingest_document(
             ingestion_id=ingestion_id,
             document_id=document_id,
             version=registered_version or requested_version,
-            lifecycle_status=LifecycleStatus.ARCHIVED,
+            lifecycle_status=(
+                LifecycleStatus.INGESTING
+                if registered_version is not None
+                else LifecycleStatus.ARCHIVED
+            ),
             status=status,
             content_hash=content_hash,
             chunk_count=0,
@@ -624,15 +693,8 @@ async def ingest_document(
             error=code,
         )
     except Exception as e:
-        if registered_version is not None:
-            await repository.fail_version(document_id, registered_version)
-        if canonical_storage_key is not None:
-            try:
-                await repository.delete_canonical_source(
-                    document_id, registered_version, filename
-                )
-            except Exception:
-                pass
+        # A process/index failure is recoverable from canonical bytes. Leave
+        # the version INGESTING so the explicit replay hook can finish it.
         await _update_job(
             ingestion_id,
             document_id=document_id,
@@ -645,7 +707,11 @@ async def ingest_document(
             ingestion_id=ingestion_id,
             document_id=document_id,
             version=registered_version or requested_version,
-            lifecycle_status=LifecycleStatus.ARCHIVED,
+            lifecycle_status=(
+                LifecycleStatus.INGESTING
+                if registered_version is not None
+                else LifecycleStatus.ARCHIVED
+            ),
             status=DocumentStatus.FAILED_INDEXING,
             content_hash=content_hash,
             chunk_count=0,

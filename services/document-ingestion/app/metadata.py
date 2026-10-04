@@ -165,6 +165,32 @@ async def update_ingestion_job(
             )
 
 
+async def update_ingestion_jobs_for_version(
+    document_id: str,
+    version: int,
+    *,
+    status: str,
+    lifecycle_status: str | None = None,
+    error_code: str | None = None,
+    error: str | None = None,
+) -> None:
+    """Update all durable attempts that refer to a recovered version."""
+    async with await psycopg.AsyncConnection.connect(settings.metadata_database_url) as conn:
+        async with conn.transaction():
+            await conn.execute(
+                """
+                UPDATE ingestion_jobs
+                SET status = %s,
+                    lifecycle_status = COALESCE(%s, lifecycle_status),
+                    error_code = %s,
+                    error = %s,
+                    updated_at = NOW()
+                WHERE document_id = %s AND version = %s
+                """,
+                (status, lifecycle_status, error_code, error, document_id, version),
+            )
+
+
 async def get_ingestion_job(ingestion_id: str) -> dict[str, Any] | None:
     async with await psycopg.AsyncConnection.connect(
         settings.metadata_database_url, row_factory=dict_row
@@ -241,6 +267,7 @@ async def find_duplicate_version(
             WHERE content_hash = %s
               AND access_scope = %s
               AND project_id IS NOT DISTINCT FROM %s
+              AND lifecycle_status IN ('CURRENT', 'INGESTING')
             ORDER BY
                 CASE lifecycle_status
                     WHEN 'CURRENT' THEN 0
@@ -396,8 +423,9 @@ async def set_canonical_storage_key(
             UPDATE document_versions
             SET canonical_storage_key = %s, updated_at = NOW()
             WHERE document_id = %s AND version = %s
+              AND (canonical_storage_key IS NULL OR canonical_storage_key = %s)
             """
-            , (canonical_storage_key, document_id, version)
+            , (canonical_storage_key, document_id, version, canonical_storage_key)
         )
         if cur.rowcount != 1:
             raise MetadataError("DOCUMENT_VERSION_NOT_FOUND")
@@ -407,7 +435,7 @@ async def finalize_version(document_id: str, version: int) -> DocumentMetadata:
         async with conn.transaction():
             cur = await conn.execute(
                 """
-                SELECT *
+                SELECT lifecycle_status, canonical_storage_key
                 FROM document_versions
                 WHERE document_id = %s AND version = %s
                 FOR UPDATE
@@ -417,6 +445,10 @@ async def finalize_version(document_id: str, version: int) -> DocumentMetadata:
             current = await cur.fetchone()
             if not current:
                 raise MetadataError("DOCUMENT_VERSION_NOT_FOUND")
+            if current[0] != "INGESTING":
+                raise MetadataError("VERSION_NOT_INGESTING")
+            if not current[1]:
+                raise MetadataError("CANONICAL_STORAGE_KEY_REQUIRED")
 
             cur = await conn.execute(
                 """

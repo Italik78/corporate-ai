@@ -120,6 +120,7 @@ def _make(
         effective_from=doc.metadata.effective_from,
         effective_to=doc.metadata.effective_to,
         project_id=doc.metadata.project_id,
+        classification=doc.metadata.classification or "INTERNAL",
         access_scope=doc.metadata.access_scope,
         page=first.page,
         page_type=page_type,
@@ -129,6 +130,10 @@ def _make(
         content=" ".join(words),
         provenance={
             "block_ids": list(dict.fromkeys(b.block_id for b in blocks)),
+            "block_provenance": {
+                block.block_id: block.provenance
+                for block in blocks
+            },
             "first_block": first.block_id,
             "last_block": blocks[-1].block_id,
             "block_types": sorted(block_types),

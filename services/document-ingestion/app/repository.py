@@ -14,6 +14,11 @@ from .metadata import (
     set_canonical_storage_key,
 )
 from .models import DocumentMetadata, DocumentVersionResponse
+from .reconciliation import (
+    ReconciliationState,
+    VersionIntegrity,
+    inspect_canonical_source,
+)
 from .storage import CanonicalStorageError, FilesystemCanonicalStorage
 
 
@@ -77,6 +82,22 @@ class Repository(Protocol):
         document_id: str,
         version: int,
     ) -> DocumentMetadata: ...
+
+    async def inspect_version_integrity(
+        self, document_id: str, version: int
+    ) -> VersionIntegrity: ...
+
+    async def read_validated_canonical_source(
+        self, document_id: str, version: int
+    ) -> tuple[DocumentVersionResponse, bytes]: ...
+
+    async def repair_missing_canonical_key(
+        self, document_id: str, version: int
+    ) -> VersionIntegrity: ...
+
+    async def copy_validated_canonical_source(
+        self, document_id: str, version: int, destination: str
+    ) -> DocumentVersionResponse: ...
 
     async def fail_version(self, document_id: str, version: int) -> None: ...
 
@@ -181,10 +202,116 @@ class PostgresRepository:
         document_id: str,
         version: int,
     ) -> DocumentMetadata:
+        integrity = await self.inspect_version_integrity(document_id, version)
+        if integrity.state.value != "REPAIRABLE":
+            raise RepositoryError(
+                f"CANONICAL_SOURCE_NOT_FINALIZABLE:{integrity.state.value}:{integrity.reason}"
+            )
         try:
             return await finalize_version(document_id, version)
         except MetadataError as exc:
             raise RepositoryError(str(exc)) from exc
+
+    async def inspect_version_integrity(
+        self, document_id: str, version: int
+    ) -> VersionIntegrity:
+        metadata = await get_version(document_id, version)
+        if metadata is None:
+            raise RepositoryError("DOCUMENT_VERSION_NOT_FOUND")
+        return inspect_canonical_source(metadata, self.storage)
+
+    async def read_validated_canonical_source(
+        self, document_id: str, version: int
+    ) -> tuple[DocumentVersionResponse, bytes]:
+        metadata = await get_version(document_id, version)
+        if metadata is None:
+            raise RepositoryError("DOCUMENT_VERSION_NOT_FOUND")
+        integrity = inspect_canonical_source(metadata, self.storage)
+        if integrity.state not in {
+            ReconciliationState.VALID,
+            ReconciliationState.REPAIRABLE,
+        }:
+            raise RepositoryError(
+                f"CANONICAL_SOURCE_UNAVAILABLE:{integrity.state.value}:{integrity.reason}"
+            )
+        if metadata.canonical_storage_key is None:
+            raise RepositoryError("CANONICAL_KEY_REPAIR_REQUIRES_EXPLICIT_ACTION")
+        try:
+            data = self.storage.verify_key(
+                metadata.canonical_storage_key,
+                metadata.content_hash,
+            )
+        except CanonicalStorageError as exc:
+            raise RepositoryError(str(exc)) from exc
+        return metadata, data
+
+    async def copy_validated_canonical_source(
+        self,
+        document_id: str,
+        version: int,
+        destination: str,
+    ) -> DocumentVersionResponse:
+        metadata = await get_version(document_id, version)
+        if metadata is None:
+            raise RepositoryError("DOCUMENT_VERSION_NOT_FOUND")
+        integrity = inspect_canonical_source(metadata, self.storage)
+        if integrity.state not in {
+            ReconciliationState.VALID,
+            ReconciliationState.REPAIRABLE,
+        }:
+            raise RepositoryError(
+                f"CANONICAL_SOURCE_UNAVAILABLE:{integrity.state.value}:{integrity.reason}"
+            )
+        if metadata.canonical_storage_key is None:
+            raise RepositoryError("CANONICAL_KEY_REPAIR_REQUIRES_EXPLICIT_ACTION")
+        try:
+            self.storage.copy_verified_key(
+                metadata.canonical_storage_key,
+                metadata.content_hash,
+                destination,
+            )
+        except CanonicalStorageError as exc:
+            raise RepositoryError(str(exc)) from exc
+        return metadata
+
+    async def repair_missing_canonical_key(
+        self, document_id: str, version: int
+    ) -> VersionIntegrity:
+        """Persist a missing key only after verifying the predicted bytes/hash.
+
+        This is deliberately an explicit repository operation. It is not run
+        during startup or normal ingestion and never changes lifecycle state.
+        """
+        metadata = await get_version(document_id, version)
+        if metadata is None:
+            raise RepositoryError("DOCUMENT_VERSION_NOT_FOUND")
+        integrity = inspect_canonical_source(metadata, self.storage)
+        if (
+            integrity.state != ReconciliationState.REPAIRABLE
+            or not integrity.candidate_storage_key
+            or metadata.canonical_storage_key is not None
+        ):
+            raise RepositoryError(
+                f"CANONICAL_KEY_NOT_REPAIRABLE:{integrity.state.value}:{integrity.reason}"
+            )
+        try:
+            self.storage.verify_key_hash(
+                integrity.candidate_storage_key,
+                metadata.content_hash,
+            )
+            await set_canonical_storage_key(
+                document_id,
+                version,
+                integrity.candidate_storage_key,
+            )
+        except CanonicalStorageError as exc:
+            raise RepositoryError(str(exc)) from exc
+        except MetadataError as exc:
+            raise RepositoryError(str(exc)) from exc
+        updated = await get_version(document_id, version)
+        if updated is None:
+            raise RepositoryError("DOCUMENT_VERSION_NOT_FOUND")
+        return inspect_canonical_source(updated, self.storage)
 
     async def fail_version(self, document_id: str, version: int) -> None:
         try:
