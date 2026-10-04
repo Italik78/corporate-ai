@@ -401,3 +401,52 @@ Scope:
 The Qwen3.6 262144-token context remains a capability ceiling rather than the default working context. Initial operating targets are 24K–32K for normal corporate chat, 32K–64K for complex reasoning and 64K–128K for large-document/multi-source work. Exceptional cases may use the full configured capacity.
 
 Implementation status: architecture accepted, implementation not started. No runtime capability is claimed from this documentation checkpoint.
+
+
+## 2026-10-04 — AI Brain architecture accepted
+
+The current Orchestrator is functional but is not yet a sufficiently intelligent decision layer. Its routing is still heavily driven by deterministic classifier/planner logic.
+
+A new target architecture is accepted:
+
+**AI Brain + deterministic Control Plane**
+
+The Brain will use Qwen3.6 to:
+- understand the objective;
+- identify required and missing information;
+- select an authorized strategy;
+- produce structured plans;
+- choose the next capability step;
+- evaluate evidence;
+- request bounded re-planning;
+- decide between answer, clarification, conditional answer and no-answer.
+
+The Control Plane remains deterministic and authoritative for:
+- capability authorization;
+- schema validation;
+- dependency validation;
+- budgets;
+- state transitions;
+- security;
+- execution.
+
+Important current finding:
+
+The Gateway's current `run_orchestrator()` sends `source_policy=["CORPORATE"]` for every orchestrated request. This currently prevents the Orchestrator from using Web Research for mixed/current-information questions. This is a policy-boundary issue to be redesigned as part of the AI Brain work; it must not be fixed by allowing the client to choose arbitrary source policy.
+
+Authoritative design documents:
+- `01_ARCHITECTURE/AI_ORCHESTRATOR.md`
+- `01_ARCHITECTURE/AI_BRAIN_IMPLEMENTATION_PLAN.md`
+- `01_ARCHITECTURE/CONVERSATION_CONTEXT_MANAGEMENT.md`
+- `99_MANAGEMENT/AI_BRAIN_NEW_CHAT_PROMPT.md`
+
+Implementation status:
+- architecture: ACCEPTED;
+- Brain Decision Contract v1: NOT IMPLEMENTED;
+- Control Plane validator: NOT IMPLEMENTED;
+- Brain runtime: NOT IMPLEMENTED;
+- Brain-driven production routing: NOT ENABLED;
+- deterministic planner fallback: PRESERVED.
+
+First implementation milestone:
+**Brain Decision Contract v1 + deterministic Control Plane validator**, followed by real Qwen contract validation before any production routing switch.
