@@ -372,3 +372,113 @@ Initial Qwen3.6 operating targets:
 - exceptional full-context cases: up to 262K.
 
 The roadmap must not mark C8 complete from documentation alone. Runtime implementation and DGX validation are required.
+
+
+## Phase D — AI Brain / Intelligent Orchestration
+
+**Status: ARCHITECTURE DEFINED / IMPLEMENTATION NOT STARTED**
+
+Objective: transform the current deterministic Orchestrator into a bounded **AI Brain + deterministic Control Plane**.
+
+Authoritative design:
+- `01_ARCHITECTURE/AI_ORCHESTRATOR.md`
+- `01_ARCHITECTURE/AI_BRAIN_IMPLEMENTATION_PLAN.md`
+- `01_ARCHITECTURE/CONVERSATION_CONTEXT_MANAGEMENT.md`
+- `99_MANAGEMENT/AI_BRAIN_NEW_CHAT_PROMPT.md`
+
+### D1 — Brain Decision Contract
+- [ ] inspect current Orchestrator/Gateway runtime
+- [ ] define Pydantic Brain Decision Contract v1
+- [ ] define structured decision enums and capability step schema
+- [ ] define invalid-output/fail-closed behavior
+- [ ] add Brain contract unit tests
+- [ ] add mocked Brain contract fixtures
+
+### D2 — Deterministic Control Plane
+- [ ] validate Brain decisions
+- [ ] validate capability authorization
+- [ ] validate capability schemas
+- [ ] validate dependencies
+- [ ] validate budgets
+- [ ] validate state transitions
+- [ ] prevent direct arbitrary model execution
+- [ ] preserve deterministic fallback
+
+### D3 — Brain Runtime
+- [ ] Qwen3.6 Brain client
+- [ ] strict JSON output mode
+- [ ] Brain system prompt
+- [ ] structured decision parser
+- [ ] decision trace without private chain-of-thought
+- [ ] real DGX Brain contract validation
+
+### D4 — Dynamic Orchestration
+- [ ] execute one capability step at a time
+- [ ] return compact results/evidence to Brain
+- [ ] Brain-driven next-step selection
+- [ ] dynamic Corporate RAG selection
+- [ ] dynamic Web Search/Fetch selection
+- [ ] clarification decisions
+- [ ] controlled answerability decisions
+
+### D5 — Re-planning
+- [ ] insufficient-evidence re-plan
+- [ ] semantic-conflict re-plan
+- [ ] failed-verification re-plan
+- [ ] applicability-gap re-plan
+- [ ] bounded retry/research
+- [ ] explicit budget exhaustion terminal state
+
+### D6 — Gateway Capability Policy
+- [ ] separate server-side capability authorization from Brain capability selection
+- [ ] INTERNAL_ONLY mode
+- [ ] INTERNAL_FIRST_WEB_FALLBACK mode
+- [ ] EXPLICIT_WEB mode
+- [ ] RESTRICTED_OFFLINE mode
+- [ ] prevent client policy escalation
+- [ ] validate current APIS contract + official-web scenario
+
+### D7 — Conversation & Context Integration
+- [ ] integrate persistent conversation state
+- [ ] integrate Working Context
+- [ ] integrate memory retrieval
+- [ ] enforce dynamic context budget
+- [ ] preserve provenance separation
+
+### D8 — Verification & Security Hardening
+- [ ] fix/diagnose semantic verification invalid-JSON handling
+- [ ] final-answer semantic verification acceptance
+- [ ] corporate prompt-injection test
+- [ ] web prompt-injection test
+- [ ] unauthorized capability test
+- [ ] policy escalation test
+- [ ] budget exhaustion test
+
+### D9 — Domain Acceptance Matrix
+- [ ] straightforward corporate question
+- [ ] clarification
+- [ ] contract/policy applicability
+- [ ] current web question
+- [ ] corporate + web synthesis
+- [ ] insufficient evidence
+- [ ] semantic conflict
+- [ ] verification failure
+- [ ] prompt injection
+- [ ] tool authorization denial
+- [ ] multi-turn context dependency
+- [ ] version/effective-date conflict
+
+### D10 — Runtime Acceptance
+
+Every D-phase milestone requires:
+1. inspect current state;
+2. one bounded change;
+3. build only affected service;
+4. restart only affected container;
+5. unit/integration tests;
+6. real DGX smoke test;
+7. logs/persisted-state inspection;
+8. Git commit;
+9. only then mark complete.
+
+The existing deterministic planner remains the fallback until D1–D9 acceptance is complete.
