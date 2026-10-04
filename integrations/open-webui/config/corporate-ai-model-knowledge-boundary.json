@@ -1,0 +1,16 @@
+{
+  "model_id": "corporate-ai",
+  "required_metadata_patch": {
+    "knowledge": [],
+    "builtinTools": {
+      "files": false,
+      "knowledge": false
+    },
+    "capabilities": {
+      "file_upload": false,
+      "file_context": true
+    }
+  },
+  "filter": "Corporate Knowledge Boundary",
+  "filter_scope": "model-only"
+}
