@@ -102,3 +102,44 @@ Retrieval score alone must not determine truth.
 - protection against cross-conversation memory leakage;
 - no persistence or exposure of private model chain-of-thought;
 - large tool and web results stored as artifacts or structured results rather than indefinitely appended to chat context.
+
+
+## AI Brain / Intelligent Orchestration
+
+The Corporate AI Orchestrator must use an **AI Brain + deterministic Control Plane** architecture.
+
+The Brain must:
+- understand non-trivial user requests;
+- identify required and missing information;
+- select among server-authorized capabilities;
+- produce structured bounded plans;
+- choose the next capability step based on results;
+- evaluate whether evidence is sufficient;
+- request bounded re-planning;
+- request clarification when materially necessary;
+- decide between answer, conditional answer, partial answer and no-answer.
+
+The Control Plane must remain deterministic and authoritative for:
+- capability authorization;
+- schema validation;
+- dependency validation;
+- state transitions;
+- resource budgets;
+- security validation;
+- capability execution.
+
+Requirements:
+- Brain output must use a strict validated structured contract;
+- invalid Brain output must fail closed;
+- model output must never execute arbitrary code or arbitrary HTTP requests;
+- client requests must not be able to elevate their own capability/source policy;
+- deterministic planner/classifier remains a fallback until Brain acceptance is complete;
+- Brain decisions must be traceable without persisting private chain-of-thought;
+- re-planning must be bounded;
+- retrieved content must always be treated as untrusted data;
+- Corporate, Web, Tool and Conversation provenance must remain distinct;
+- verification failure must prevent unverified answers from escaping;
+- the system must optimize for verifiable answers rather than answer generation at any cost.
+
+Authoritative implementation plan:
+`01_ARCHITECTURE/AI_BRAIN_IMPLEMENTATION_PLAN.md`.
