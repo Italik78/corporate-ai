@@ -283,6 +283,42 @@ async def find_duplicate_version(
         return _row_to_model(row) if row else None
 
 
+async def find_current_versions_by_source_file(
+    source_file: str,
+) -> list[DocumentVersionResponse]:
+    async with await psycopg.AsyncConnection.connect(
+        settings.metadata_database_url, row_factory=dict_row
+    ) as conn:
+        cur = await conn.execute(
+            """
+            SELECT *
+            FROM document_versions
+            WHERE source_file = %s
+              AND lifecycle_status = 'CURRENT'
+            ORDER BY version DESC
+            """,
+            (source_file,),
+        )
+        rows = await cur.fetchall()
+    return [_row_to_model(row) for row in rows]
+
+
+async def find_current_versions() -> list[DocumentVersionResponse]:
+    async with await psycopg.AsyncConnection.connect(
+        settings.metadata_database_url, row_factory=dict_row
+    ) as conn:
+        cur = await conn.execute(
+            """
+            SELECT *
+            FROM document_versions
+            WHERE lifecycle_status = 'CURRENT'
+            ORDER BY source_file, version DESC
+            """
+        )
+        rows = await cur.fetchall()
+    return [_row_to_model(row) for row in rows]
+
+
 async def find_document_by_source_reference(
     source_system: str,
     source_reference: str,

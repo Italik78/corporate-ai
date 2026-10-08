@@ -27,6 +27,20 @@ _CORPORATE_TERMS = (
     "клиентски договор",
 )
 
+_STRUCTURED_CORPORATE_TERMS = (
+    "файл",
+    "файла",
+    "файловете",
+    "документ",
+    "документа",
+    "документите",
+    "таблица",
+    "таблицата",
+    "таблиците",
+    "редовете",
+    "записите",
+)
+
 _WEB_TERMS = (
     "интернет",
     "онлайн",
@@ -68,7 +82,11 @@ def classify_task(
     web_allowed = SourceClass.WEB in source_policy
 
     corporate_signal = _contains_any(text, _CORPORATE_TERMS)
+    structured_corporate_signal = _contains_any(text, _STRUCTURED_CORPORATE_TERMS)
     web_signal = _contains_any(text, _WEB_TERMS)
+
+    if structured_corporate_signal and corporate_allowed:
+        corporate_signal = True
 
     if corporate_signal and web_allowed and web_signal:
         return TaskType.CORPORATE_AND_WEB

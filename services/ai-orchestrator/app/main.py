@@ -23,6 +23,32 @@ app = FastAPI(
 )
 
 
+def determine_answer_status(
+    *,
+    task_type,
+    resolution: QuestionResolution,
+    verification,
+    evidence_status: EvidenceStatus,
+) -> AnswerStatus:
+    if task_type.value == "GENERAL" and resolution == QuestionResolution.ANSWERABLE:
+        return AnswerStatus.GENERAL
+    if resolution == QuestionResolution.AMBIGUOUS:
+        return AnswerStatus.CLARIFICATION_REQUIRED
+    if (
+        resolution == QuestionResolution.CONFLICTED
+        and verification.passed
+        and evidence_status == EvidenceStatus.CONFLICT
+    ):
+        return AnswerStatus.CONFLICT
+    if (
+        resolution == QuestionResolution.ANSWERABLE
+        and verification.passed
+        and evidence_status == EvidenceStatus.SUPPORTED
+    ):
+        return AnswerStatus.GROUNDED
+    return AnswerStatus.NO_ANSWER
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {
@@ -53,7 +79,10 @@ async def orchestrate(
     )
     task.task_type = decision.task_type
 
-    plan = orchestrator.create_plan(task)
+    plan = orchestrator.create_plan(
+        task,
+        decision if brain_mode == "brain" else None,
+    )
 
     (
         _results,
@@ -63,18 +92,12 @@ async def orchestrate(
         verification,
     ) = await orchestrator.execute_plan(task, plan)
 
-    if task.task_type.value == "GENERAL" and synthesis.resolution == QuestionResolution.ANSWERABLE:
-        answer_status = AnswerStatus.GENERAL
-    elif synthesis.resolution == QuestionResolution.AMBIGUOUS:
-        answer_status = AnswerStatus.CLARIFICATION_REQUIRED
-    elif (
-        synthesis.resolution == QuestionResolution.ANSWERABLE
-        and verification.passed
-        and evaluation.status == EvidenceStatus.SUPPORTED
-    ):
-        answer_status = AnswerStatus.GROUNDED
-    else:
-        answer_status = AnswerStatus.NO_ANSWER
+    answer_status = determine_answer_status(
+        task_type=task.task_type,
+        resolution=synthesis.resolution,
+        verification=verification,
+        evidence_status=evaluation.status,
+    )
 
     return OrchestrationResponse(
         task_id=task.task_id,

@@ -1,16 +1,27 @@
 import secrets
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 
+from .auth import ServicePrincipal, service_auth
 from .config import settings
 from .metadata import (
+    find_current_versions,
+    find_current_versions_by_source_file,
     get_version,
     health as metadata_health,
     initialize_metadata,
     list_versions,
     update_ingestion_jobs_for_version,
 )
-from .models import DocumentProcessResponse, DocumentStatus, StatusResponse
+from .document_reference import DocumentReferenceStatus, resolve_document_reference
+from .models import (
+    DocumentProcessResponse,
+    DocumentStatus,
+    StatusResponse,
+    StructuredQueryRequest,
+    StructuredQueryResponse,
+)
+from .structured_query import StructuredQueryError, extract_xls_rows, query_xls_rows_with_count
 from .pipeline import get_job, ingest_document
 from .recovery import recover_ingesting_version
 from .repository import RepositoryError, repository
@@ -172,6 +183,170 @@ async def paperless_webhook(
         raise HTTPException(status_code=422, detail=result.model_dump())
 
     return result
+
+
+@app.post(
+    "/v1/documents/structured-query",
+    response_model=StructuredQueryResponse,
+)
+async def structured_query(
+    request: StructuredQueryRequest,
+    principal: ServicePrincipal = Depends(service_auth("structured_read")),
+):
+    if request.source_file is not None and (
+        request.document_id is not None or request.version is not None
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="DOCUMENT_REFERENCE_AMBIGUOUS",
+        )
+
+    if request.source_file is not None:
+        matches = await find_current_versions_by_source_file(request.source_file)
+
+        if not matches:
+            raise HTTPException(
+                status_code=404,
+                detail="DOCUMENT_SOURCE_FILE_NOT_FOUND",
+            )
+
+        if len(matches) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "DOCUMENT_SOURCE_FILE_AMBIGUOUS",
+                    "source_file": request.source_file,
+                    "matches": [match.model_dump() for match in matches],
+                },
+            )
+
+        metadata = matches[0]
+    else:
+        if request.document_id is None or request.version is None:
+            raise HTTPException(
+                status_code=422,
+                detail="DOCUMENT_VERSION_REFERENCE_REQUIRED",
+            )
+
+        metadata = await get_version(request.document_id, request.version)
+
+        if metadata is None:
+            raise HTTPException(
+                status_code=404,
+                detail="DOCUMENT_VERSION_NOT_FOUND",
+            )
+
+    if metadata.lifecycle_status.value != "CURRENT":
+        raise HTTPException(
+            status_code=403,
+            detail="STRUCTURED_QUERY_REQUIRES_CURRENT_VERSION",
+        )
+
+    if metadata.access_scope not in principal.access_scopes:
+        raise HTTPException(
+            status_code=403,
+            detail="STRUCTURED_QUERY_ACCESS_SCOPE_DENIED",
+        )
+
+    if metadata.classification not in principal.classifications:
+        raise HTTPException(
+            status_code=403,
+            detail="STRUCTURED_QUERY_CLASSIFICATION_DENIED",
+        )
+
+    if (
+        metadata.project_id is not None
+        and "*" not in principal.project_ids
+        and metadata.project_id not in principal.project_ids
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="STRUCTURED_QUERY_PROJECT_DENIED",
+        )
+
+    try:
+        validated_metadata, data = (
+            await repository.read_validated_canonical_source(
+                metadata.document_id,
+                metadata.version,
+            )
+        )
+        rows = extract_xls_rows(validated_metadata.source_file, data)
+        result, total_matches = query_xls_rows_with_count(
+            rows,
+            sheet=request.sheet,
+            filters=request.filters,
+            columns=request.columns,
+            limit=request.limit,
+        )
+    except StructuredQueryError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+    except RepositoryError as exc:
+        if str(exc) == "DOCUMENT_VERSION_NOT_FOUND":
+            raise HTTPException(
+                status_code=404,
+                detail="DOCUMENT_VERSION_NOT_FOUND",
+            ) from exc
+
+        raise HTTPException(
+            status_code=503,
+            detail="CANONICAL_SOURCE_UNAVAILABLE",
+        ) from exc
+
+    return StructuredQueryResponse(
+        document_id=validated_metadata.document_id,
+        version=validated_metadata.version,
+        source_file=validated_metadata.source_file,
+        content_hash=validated_metadata.content_hash,
+        sheet=request.sheet,
+        total_matches=total_matches,
+        rows=result,
+    )
+
+
+@app.get("/v1/documents/resolve-by-source-file")
+async def resolve_by_source_file(
+    source_file: str,
+    principal: ServicePrincipal = Depends(service_auth("structured_read")),
+):
+    documents = await find_current_versions()
+    documents = [
+        document
+        for document in documents
+        if document.access_scope in principal.access_scopes
+        and document.classification in principal.classifications
+        and (
+            document.project_id is None
+            or "*" in principal.project_ids
+            or document.project_id in principal.project_ids
+        )
+    ]
+
+    resolution = resolve_document_reference(source_file, documents)
+
+    if resolution.status == DocumentReferenceStatus.NOT_FOUND:
+        raise HTTPException(
+            status_code=404,
+            detail="DOCUMENT_SOURCE_FILE_NOT_FOUND",
+        )
+
+    if resolution.status == DocumentReferenceStatus.AMBIGUOUS:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "DOCUMENT_SOURCE_FILE_AMBIGUOUS",
+                "source_file": source_file,
+                "matches": [
+                    match.model_dump()
+                    for match in resolution.matches
+                ],
+            },
+        )
+
+    return resolution.document
 
 
 @app.get("/v1/documents/{document_id}/versions")

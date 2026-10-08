@@ -309,3 +309,629 @@ def test_corporate_and_web_answer_requires_applicable_evidence_from_both(monkeyp
     assert evaluation.status == EvidenceStatus.INSUFFICIENT_EVIDENCE
     assert verification.passed is False
     assert "REQUIRED_SOURCE_CLASS_MISSING:WEB" in verification.conflict_errors
+
+
+def test_conflicted_corporate_and_web_answer_is_semantically_verified(monkeypatch):
+    import asyncio
+    import app.orchestrator as module
+    from app.models import Budget, SourceClass
+
+    class Registry:
+        def get(self, capability):
+            class Stub:
+                async def execute(self, request):
+                    if request.capability == CapabilityType.CORPORATE_RETRIEVAL:
+                        return CapabilityResult(capability=request.capability, success=True, data={
+                            "results": [{"evidence_id": "CORP:contract", "source_id": "contract-1",
+                                         "claim": "Contract price is 100 EUR for 36 months", "version": 1}]
+                        })
+                    if request.capability == CapabilityType.WEB_SEARCH:
+                        return CapabilityResult(capability=request.capability, success=True, data={
+                            "evidence": [{"url": "https://www.apis.bg/bg/ceni", "content": "Public price is 120 EUR for 12 months"}]
+                        })
+                    if request.capability == CapabilityType.WEB_FETCH:
+                        return CapabilityResult(capability=request.capability, success=True, data={
+                            "evidence": [{"url": "https://www.apis.bg/bg/ceni", "content": "Public price is 120 EUR for 12 months", "fetched_at": "2026-10-04T00:00:00+00:00"}]
+                        })
+                    raise AssertionError("unexpected capability")
+            return Stub()
+
+    async def select_source(_self, _task, _evidence, _budget):
+        return type("Selection", (), {"evidence_ids": ["WEB:https://www.apis.bg/bg/ceni"]})()
+
+    async def synthesize(_self, _task, evidence, _budget):
+        assert {item.source_class for item in evidence} == {SourceClass.CORPORATE, SourceClass.WEB}
+        return SynthesisResult(
+            answer="Contract: 100 EUR/36 months. Public listing: 120 EUR/12 months; periods differ.",
+            resolution=QuestionResolution.CONFLICTED,
+            material_claims=[
+                SynthesisClaim(claim="Contract is 100 EUR for 36 months.", evidence_ids=["CORP:contract"]),
+                SynthesisClaim(claim="Official public listing is 120 EUR for 12 months.", evidence_ids=["WEB:https://www.apis.bg/bg/ceni"]),
+            ],
+            evidence_ids=["CORP:contract", "WEB:https://www.apis.bg/bg/ceni"],
+        )
+
+    async def verify_claims(**kwargs):
+        assert len(kwargs["claims"]) == 2
+        return [
+            SemanticVerificationResult(status=SemanticVerificationStatus.SUPPORTED, reason="contract value supported"),
+            SemanticVerificationResult(status=SemanticVerificationStatus.SUPPORTED, reason="web value supported"),
+        ]
+
+    async def verify_answer(**_kwargs):
+        return SemanticVerificationResult(status=SemanticVerificationStatus.SUPPORTED, reason="both values and terms retained")
+
+    monkeypatch.setattr(Orchestrator, "select_web_fetch_candidates", select_source)
+    monkeypatch.setattr(Orchestrator, "synthesize_answer", synthesize)
+    monkeypatch.setattr(module, "verify_claims_semantically", verify_claims)
+    monkeypatch.setattr(module, "verify_answer_semantically", verify_answer)
+    task = Task(
+        user_request="Compare the contract price with the current official price",
+        normalized_question="Compare the contract price with the current official price",
+        task_type=TaskType.CORPORATE_AND_WEB,
+        allowed_source_classes=[SourceClass.CORPORATE, SourceClass.WEB],
+        budget=Budget(max_retrieval_rounds=1, max_web_searches=1, max_web_fetches=1),
+    )
+    results, evaluation, conflicts, synthesis, verification = asyncio.run(
+        Orchestrator(Registry()).execute_plan(task, build_plan(task))
+    )
+    assert synthesis.resolution == QuestionResolution.CONFLICTED
+    assert evaluation.status == EvidenceStatus.CONFLICT
+    assert {item.source_class for item in evaluation.applicable} == {
+        SourceClass.CORPORATE,
+        SourceClass.WEB,
+    }
+    assert conflicts.unresolved is False  # semantic synthesis retains the explicit difference
+    assert len([item for item in results if item.capability == CapabilityType.WEB_FETCH]) == 1
+    assert verification.passed is True
+    assert [item.status for item in verification.semantic_results] == ["SUPPORTED", "SUPPORTED"]
+
+
+def test_structured_query_rows_become_corporate_evidence(monkeypatch):
+    import asyncio
+    import app.orchestrator as module
+    from app.models import Budget, SourceClass
+
+    class Registry:
+        def get(self, capability):
+            class Stub:
+                async def execute(self, request):
+                    if request.capability == CapabilityType.STRUCTURED_QUERY:
+                        return CapabilityResult(
+                            capability=request.capability,
+                            success=True,
+                            data={
+                                "document_id": "doc-structured-1",
+                                "version": 1,
+                                "source_file": "contracts.xls",
+                                "content_hash": "hash-1",
+                                "total_matches": 1,
+                                "rows": [{
+                                    "evidence_id": "structured:doc-structured-1:1:0:42",
+                                    "source_class": "CORPORATE",
+                                    "source_id": "doc-structured-1",
+                                    "source_location": "contracts.xls#sheet=Contracts&sheet_index=0&row=42",
+                                    "claim": "Номер=A-42; Статус=В изпълнение",
+                                    "version": 1,
+                                    "content_hash": "hash-1",
+                                    "access_scope": "INTERNAL",
+                                    "structured_row": {
+                                        "sheet": "Contracts",
+                                        "sheet_index": 0,
+                                        "row_index": 42,
+                                        "cells": {
+                                            "Номер": "A-42",
+                                            "Статус": "В изпълнение",
+                                        },
+                                    },
+                                }],
+                            },
+                        )
+                    raise AssertionError("unexpected capability")
+
+            return Stub()
+
+    captured = []
+
+    async def synthesize(_self, _task, evidence, _budget):
+        captured.extend(evidence)
+        return SynthesisResult(
+            answer="Намерена е една позиция.",
+            resolution=QuestionResolution.ANSWERABLE,
+            material_claims=[
+                SynthesisClaim(
+                    claim="Намерена е една позиция.",
+                    evidence_ids=["structured:doc-structured-1:1:0:42"],
+                )
+            ],
+            evidence_ids=["structured:doc-structured-1:1:0:42"],
+        )
+
+    monkeypatch.setattr(Orchestrator, "synthesize_answer", synthesize)
+    monkeypatch.setattr(
+        module,
+        "verify_evidence_support",
+        lambda **kwargs: VerificationResult(
+            passed=True,
+            material_claims_checked=1,
+            reason="supported",
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "verify_claims_semantically",
+        lambda **kwargs: asyncio.sleep(
+            0,
+            result=[
+                SemanticVerificationResult(
+                    status=SemanticVerificationStatus.SUPPORTED,
+                    reason="supported",
+                )
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "verify_answer_semantically",
+        lambda **kwargs: asyncio.sleep(
+            0,
+            result=SemanticVerificationResult(
+                status=SemanticVerificationStatus.SUPPORTED,
+                reason="supported",
+            ),
+        ),
+    )
+
+    task = Task(
+        user_request="Покажи редовете от договора.",
+        normalized_question="Покажи редовете от договора.",
+        task_type=TaskType.CORPORATE_KNOWLEDGE,
+        allowed_source_classes=[SourceClass.CORPORATE],
+        budget=Budget(max_steps=2),
+    )
+
+    from app.models import Plan, PlanStep
+
+    plan = Plan(
+        task_id=task.task_id,
+        steps=[
+            PlanStep(
+                step_id="structured-query",
+                type="STRUCTURED_DOCUMENT_QUERY",
+                capability=CapabilityType.STRUCTURED_QUERY,
+                input={"source_file": "contracts.xls"},
+                evidence_required=True,
+            )
+        ],
+    )
+
+    results, _evaluation, _conflicts, synthesis, verification = asyncio.run(
+        Orchestrator(Registry()).execute_plan(task, plan)
+    )
+
+    assert any(
+        item.capability == CapabilityType.STRUCTURED_QUERY
+        for item in results
+    )
+    assert any(
+        item.evidence_id == "structured:doc-structured-1:1:0:42"
+        for item in captured
+    )
+    assert synthesis.resolution == QuestionResolution.ANSWERABLE
+    assert verification.passed is True
+
+
+def test_structured_query_zero_rows_does_not_fallback_to_web_or_rag(monkeypatch):
+    import asyncio
+    from app.models import Budget, SourceClass, Plan, PlanStep
+
+    calls = []
+
+    class Registry:
+        def get(self, capability):
+            class Stub:
+                async def execute(self, request):
+                    calls.append(request.capability)
+
+                    if request.capability == CapabilityType.STRUCTURED_QUERY:
+                        return CapabilityResult(
+                            capability=request.capability,
+                            success=True,
+                            data={
+                                "document_id": "doc-structured-2",
+                                "version": 1,
+                                "source_file": "contracts.xls",
+                                "content_hash": "hash-2",
+                                "total_matches": 0,
+                                "rows": [],
+                            },
+                        )
+
+                    raise AssertionError(
+                        "structured query must not trigger another capability"
+                    )
+
+            return Stub()
+
+    async def synthesize(_self, _task, _evidence, _budget):
+        return SynthesisResult(
+            answer="",
+            resolution=QuestionResolution.INSUFFICIENT,
+        )
+
+    monkeypatch.setattr(Orchestrator, "synthesize_answer", synthesize)
+
+    task = Task(
+        user_request="Намери договори със срок след 01.01.2027.",
+        normalized_question="Намери договори със срок след 01.01.2027.",
+        task_type=TaskType.CORPORATE_KNOWLEDGE,
+        allowed_source_classes=[SourceClass.CORPORATE, SourceClass.WEB],
+        budget=Budget(
+            max_steps=4,
+            max_retrieval_rounds=2,
+            max_web_searches=2,
+        ),
+    )
+
+    plan = Plan(
+        task_id=task.task_id,
+        steps=[
+            PlanStep(
+                step_id="structured-query",
+                type="STRUCTURED_DOCUMENT_QUERY",
+                capability=CapabilityType.STRUCTURED_QUERY,
+                input={"source_file": "contracts.xls"},
+                evidence_required=True,
+            )
+        ],
+    )
+
+    results, _evaluation, _conflicts, synthesis, _verification = asyncio.run(
+        Orchestrator(Registry()).execute_plan(task, plan)
+    )
+
+    assert calls == [CapabilityType.STRUCTURED_QUERY]
+    assert len(results) == 1
+    assert synthesis.resolution == QuestionResolution.INSUFFICIENT
+
+
+def test_structured_query_failure_fails_closed_without_fallback(monkeypatch):
+    import asyncio
+    from app.models import Budget, SourceClass, Plan, PlanStep
+
+    calls = []
+
+    class Registry:
+        def get(self, capability):
+            class Stub:
+                async def execute(self, request):
+                    calls.append(request.capability)
+
+                    if request.capability == CapabilityType.STRUCTURED_QUERY:
+                        return CapabilityResult(
+                            capability=request.capability,
+                            success=False,
+                            error="structured query failed (403)",
+                        )
+
+                    raise AssertionError(
+                        "structured query failure must not trigger fallback"
+                    )
+
+            return Stub()
+
+    async def synthesize(_self, _task, _evidence, _budget):
+        return SynthesisResult(
+            answer="",
+            resolution=QuestionResolution.INSUFFICIENT,
+        )
+
+    monkeypatch.setattr(Orchestrator, "synthesize_answer", synthesize)
+
+    task = Task(
+        user_request="Покажи договора от таблицата.",
+        normalized_question="Покажи договора от таблицата.",
+        task_type=TaskType.CORPORATE_KNOWLEDGE,
+        allowed_source_classes=[SourceClass.CORPORATE, SourceClass.WEB],
+        budget=Budget(
+            max_steps=4,
+            max_retrieval_rounds=2,
+            max_web_searches=2,
+        ),
+    )
+
+    plan = Plan(
+        task_id=task.task_id,
+        steps=[
+            PlanStep(
+                step_id="structured-query",
+                type="STRUCTURED_DOCUMENT_QUERY",
+                capability=CapabilityType.STRUCTURED_QUERY,
+                input={"source_file": "contracts.xls"},
+                evidence_required=True,
+            )
+        ],
+    )
+
+    results, _evaluation, _conflicts, synthesis, _verification = asyncio.run(
+        Orchestrator(Registry()).execute_plan(task, plan)
+    )
+
+    assert calls == [CapabilityType.STRUCTURED_QUERY]
+    assert len(results) == 1
+    assert synthesis.resolution == QuestionResolution.INSUFFICIENT
+
+
+def test_structured_query_rows_become_corporate_evidence(monkeypatch):
+    import asyncio
+    import app.orchestrator as module
+    from app.models import Budget, SourceClass
+
+    class Registry:
+        def get(self, capability):
+            class Stub:
+                async def execute(self, request):
+                    if request.capability == CapabilityType.STRUCTURED_QUERY:
+                        return CapabilityResult(
+                            capability=request.capability,
+                            success=True,
+                            data={
+                                "document_id": "doc-structured-1",
+                                "version": 1,
+                                "source_file": "contracts.xls",
+                                "content_hash": "hash-1",
+                                "total_matches": 1,
+                                "rows": [{
+                                    "evidence_id": "structured:doc-structured-1:1:0:42",
+                                    "source_class": "CORPORATE",
+                                    "source_id": "doc-structured-1",
+                                    "source_location": "contracts.xls#sheet=Contracts&sheet_index=0&row=42",
+                                    "claim": "Номер=A-42; Статус=В изпълнение",
+                                    "version": 1,
+                                    "content_hash": "hash-1",
+                                    "access_scope": "INTERNAL",
+                                    "structured_row": {
+                                        "sheet": "Contracts",
+                                        "sheet_index": 0,
+                                        "row_index": 42,
+                                        "cells": {
+                                            "Номер": "A-42",
+                                            "Статус": "В изпълнение",
+                                        },
+                                    },
+                                }],
+                            },
+                        )
+                    raise AssertionError("unexpected capability")
+
+            return Stub()
+
+    captured = []
+
+    async def synthesize(_self, _task, evidence, _budget):
+        captured.extend(evidence)
+        return SynthesisResult(
+            answer="Намерена е една позиция.",
+            resolution=QuestionResolution.ANSWERABLE,
+            material_claims=[
+                SynthesisClaim(
+                    claim="Намерена е една позиция.",
+                    evidence_ids=["structured:doc-structured-1:1:0:42"],
+                )
+            ],
+            evidence_ids=["structured:doc-structured-1:1:0:42"],
+        )
+
+    monkeypatch.setattr(Orchestrator, "synthesize_answer", synthesize)
+    monkeypatch.setattr(
+        module,
+        "verify_evidence_support",
+        lambda **kwargs: VerificationResult(
+            passed=True,
+            material_claims_checked=1,
+            reason="supported",
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "verify_claims_semantically",
+        lambda **kwargs: asyncio.sleep(
+            0,
+            result=[
+                SemanticVerificationResult(
+                    status=SemanticVerificationStatus.SUPPORTED,
+                    reason="supported",
+                )
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "verify_answer_semantically",
+        lambda **kwargs: asyncio.sleep(
+            0,
+            result=SemanticVerificationResult(
+                status=SemanticVerificationStatus.SUPPORTED,
+                reason="supported",
+            ),
+        ),
+    )
+
+    task = Task(
+        user_request="Покажи редовете от договора.",
+        normalized_question="Покажи редовете от договора.",
+        task_type=TaskType.CORPORATE_KNOWLEDGE,
+        allowed_source_classes=[SourceClass.CORPORATE],
+        budget=Budget(max_steps=2),
+    )
+
+    from app.models import Plan, PlanStep
+
+    plan = Plan(
+        task_id=task.task_id,
+        steps=[
+            PlanStep(
+                step_id="structured-query",
+                type="STRUCTURED_DOCUMENT_QUERY",
+                capability=CapabilityType.STRUCTURED_QUERY,
+                input={"source_file": "contracts.xls"},
+                evidence_required=True,
+            )
+        ],
+    )
+
+    results, _evaluation, _conflicts, synthesis, verification = asyncio.run(
+        Orchestrator(Registry()).execute_plan(task, plan)
+    )
+
+    assert any(
+        item.capability == CapabilityType.STRUCTURED_QUERY
+        for item in results
+    )
+    assert any(
+        item.evidence_id == "structured:doc-structured-1:1:0:42"
+        for item in captured
+    )
+    assert synthesis.resolution == QuestionResolution.ANSWERABLE
+    assert verification.passed is True
+
+
+def test_structured_query_zero_rows_does_not_fallback_to_web_or_rag(monkeypatch):
+    import asyncio
+    from app.models import Budget, SourceClass, Plan, PlanStep
+
+    calls = []
+
+    class Registry:
+        def get(self, capability):
+            class Stub:
+                async def execute(self, request):
+                    calls.append(request.capability)
+
+                    if request.capability == CapabilityType.STRUCTURED_QUERY:
+                        return CapabilityResult(
+                            capability=request.capability,
+                            success=True,
+                            data={
+                                "document_id": "doc-structured-2",
+                                "version": 1,
+                                "source_file": "contracts.xls",
+                                "content_hash": "hash-2",
+                                "total_matches": 0,
+                                "rows": [],
+                            },
+                        )
+
+                    raise AssertionError(
+                        "structured query must not trigger another capability"
+                    )
+
+            return Stub()
+
+    async def synthesize(_self, _task, _evidence, _budget):
+        return SynthesisResult(
+            answer="",
+            resolution=QuestionResolution.INSUFFICIENT,
+        )
+
+    monkeypatch.setattr(Orchestrator, "synthesize_answer", synthesize)
+
+    task = Task(
+        user_request="Намери договори със срок след 01.01.2027.",
+        normalized_question="Намери договори със срок след 01.01.2027.",
+        task_type=TaskType.CORPORATE_KNOWLEDGE,
+        allowed_source_classes=[SourceClass.CORPORATE, SourceClass.WEB],
+        budget=Budget(
+            max_steps=4,
+            max_retrieval_rounds=2,
+            max_web_searches=2,
+        ),
+    )
+
+    plan = Plan(
+        task_id=task.task_id,
+        steps=[
+            PlanStep(
+                step_id="structured-query",
+                type="STRUCTURED_DOCUMENT_QUERY",
+                capability=CapabilityType.STRUCTURED_QUERY,
+                input={"source_file": "contracts.xls"},
+                evidence_required=True,
+            )
+        ],
+    )
+
+    results, _evaluation, _conflicts, synthesis, _verification = asyncio.run(
+        Orchestrator(Registry()).execute_plan(task, plan)
+    )
+
+    assert calls == [CapabilityType.STRUCTURED_QUERY]
+    assert len(results) == 1
+    assert synthesis.resolution == QuestionResolution.INSUFFICIENT
+
+
+def test_structured_query_failure_fails_closed_without_fallback(monkeypatch):
+    import asyncio
+    from app.models import Budget, SourceClass, Plan, PlanStep
+
+    calls = []
+
+    class Registry:
+        def get(self, capability):
+            class Stub:
+                async def execute(self, request):
+                    calls.append(request.capability)
+
+                    if request.capability == CapabilityType.STRUCTURED_QUERY:
+                        return CapabilityResult(
+                            capability=request.capability,
+                            success=False,
+                            error="structured query failed (403)",
+                        )
+
+                    raise AssertionError(
+                        "structured query failure must not trigger fallback"
+                    )
+
+            return Stub()
+
+    async def synthesize(_self, _task, _evidence, _budget):
+        return SynthesisResult(
+            answer="",
+            resolution=QuestionResolution.INSUFFICIENT,
+        )
+
+    monkeypatch.setattr(Orchestrator, "synthesize_answer", synthesize)
+
+    task = Task(
+        user_request="Покажи договора от таблицата.",
+        normalized_question="Покажи договора от таблицата.",
+        task_type=TaskType.CORPORATE_KNOWLEDGE,
+        allowed_source_classes=[SourceClass.CORPORATE, SourceClass.WEB],
+        budget=Budget(
+            max_steps=4,
+            max_retrieval_rounds=2,
+            max_web_searches=2,
+        ),
+    )
+
+    plan = Plan(
+        task_id=task.task_id,
+        steps=[
+            PlanStep(
+                step_id="structured-query",
+                type="STRUCTURED_DOCUMENT_QUERY",
+                capability=CapabilityType.STRUCTURED_QUERY,
+                input={"source_file": "contracts.xls"},
+                evidence_required=True,
+            )
+        ],
+    )
+
+    results, _evaluation, _conflicts, synthesis, _verification = asyncio.run(
+        Orchestrator(Registry()).execute_plan(task, plan)
+    )
+
+    assert calls == [CapabilityType.STRUCTURED_QUERY]
+    assert len(results) == 1
+    assert synthesis.resolution == QuestionResolution.INSUFFICIENT

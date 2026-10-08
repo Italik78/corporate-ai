@@ -52,6 +52,7 @@ class EvidenceStatus(str, Enum):
 class AnswerStatus(str, Enum):
     GROUNDED = "GROUNDED"
     CONDITIONAL = "CONDITIONAL"
+    CONFLICT = "CONFLICT"
     GENERAL = "GENERAL"
     CLARIFICATION_REQUIRED = "CLARIFICATION_REQUIRED"
     NO_ANSWER = "NO_ANSWER"
@@ -74,6 +75,7 @@ class StepStatus(str, Enum):
 
 class CapabilityType(str, Enum):
     CORPORATE_RETRIEVAL = "CORPORATE_RETRIEVAL"
+    STRUCTURED_QUERY = "STRUCTURED_QUERY"
     WEB_SEARCH = "WEB_SEARCH"
     WEB_FETCH = "WEB_FETCH"
     LLM_REASONING = "LLM_REASONING"

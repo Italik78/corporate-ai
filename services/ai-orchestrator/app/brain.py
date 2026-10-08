@@ -15,6 +15,7 @@ class BrainPlanStep(BaseModel):
     model_config = ConfigDict(extra="forbid")
     step_id: str = Field(min_length=1, max_length=64)
     capability: CapabilityType
+    input: dict[str, Any] = Field(default_factory=dict)
     depends_on: list[str] = Field(default_factory=list)
 
 
@@ -68,7 +69,13 @@ def validate_decision(
         raise BrainDecisionRejected("decision attempts to elevate source policy")
     if len(decision.source_policy) != len(set(decision.source_policy)):
         raise BrainDecisionRejected("duplicate source policy")
-    permitted = {CapabilityType.CORPORATE_RETRIEVAL, CapabilityType.WEB_SEARCH, CapabilityType.WEB_FETCH, CapabilityType.GENERAL_RESPONSE}
+    permitted = {
+        CapabilityType.CORPORATE_RETRIEVAL,
+        CapabilityType.STRUCTURED_QUERY,
+        CapabilityType.WEB_SEARCH,
+        CapabilityType.WEB_FETCH,
+        CapabilityType.GENERAL_RESPONSE,
+    }
     if not set(decision.required_capabilities).issubset(permitted):
         raise BrainDecisionRejected("capability is not allowed by control plane")
     for step in decision.plan:
@@ -76,12 +83,26 @@ def validate_decision(
             raise BrainDecisionRejected("capability is not allowed by control plane")
         if step.capability == CapabilityType.GENERAL_RESPONSE and decision.task_type != TaskType.GENERAL:
             raise BrainDecisionRejected("general response capability is only allowed for GENERAL tasks")
-        if step.capability == CapabilityType.CORPORATE_RETRIEVAL and SourceClass.CORPORATE not in allowed_sources:
-            raise BrainDecisionRejected("corporate retrieval is not authorized")
+        if step.capability in (CapabilityType.CORPORATE_RETRIEVAL, CapabilityType.STRUCTURED_QUERY) and SourceClass.CORPORATE not in allowed_sources:
+            raise BrainDecisionRejected("corporate capability is not authorized")
         if step.capability in (CapabilityType.WEB_SEARCH, CapabilityType.WEB_FETCH) and SourceClass.WEB not in allowed_sources:
             raise BrainDecisionRejected("web capability is not authorized")
-        if step.capability == CapabilityType.CORPORATE_RETRIEVAL and SourceClass.CORPORATE not in decision.source_policy:
+        if step.capability in (CapabilityType.CORPORATE_RETRIEVAL, CapabilityType.STRUCTURED_QUERY) and SourceClass.CORPORATE not in decision.source_policy:
             raise BrainDecisionRejected("plan uses a source omitted from its policy")
+        if step.capability == CapabilityType.STRUCTURED_QUERY:
+            has_source_file = bool(str(step.input.get("source_file", "")).strip())
+            has_document_ref = bool(
+                str(step.input.get("document_id", "")).strip()
+            ) and step.input.get("version") is not None
+
+            if has_source_file and has_document_ref:
+                raise BrainDecisionRejected(
+                    "structured query cannot combine source_file with document_id/version"
+                )
+            if not has_source_file and not has_document_ref:
+                raise BrainDecisionRejected(
+                    "structured query requires exact source_file or document_id/version"
+                )
         if step.capability in (CapabilityType.WEB_SEARCH, CapabilityType.WEB_FETCH) and SourceClass.WEB not in decision.source_policy:
             raise BrainDecisionRejected("plan uses a source omitted from its policy")
     if decision.task_type in (TaskType.CORPORATE_KNOWLEDGE, TaskType.CORPORATE_AND_WEB) and SourceClass.CORPORATE not in allowed_sources:
@@ -104,15 +125,27 @@ def validate_decision(
         raise BrainDecisionRejected("decision drops a deterministically required source class")
     if not required_for_type.get(decision.task_type, set()).issubset(set(decision.source_policy)):
         raise BrainDecisionRejected("decision task type exceeds its selected source policy")
-    expected_capabilities = {
-        TaskType.CORPORATE_KNOWLEDGE: [CapabilityType.CORPORATE_RETRIEVAL],
-        TaskType.WEB_RESEARCH: [CapabilityType.WEB_SEARCH],
-        TaskType.CORPORATE_AND_WEB: [CapabilityType.CORPORATE_RETRIEVAL, CapabilityType.WEB_SEARCH],
-        TaskType.GENERAL: [CapabilityType.GENERAL_RESPONSE],
-    }.get(decision.task_type, [])
     actual_capabilities = [step.capability for step in decision.plan]
-    if actual_capabilities != expected_capabilities or decision.required_capabilities != expected_capabilities:
-        raise BrainDecisionRejected("proposed plan differs from the deterministic capability plan")
+    allowed_capability_plans = {
+        TaskType.CORPORATE_KNOWLEDGE: {
+            (CapabilityType.CORPORATE_RETRIEVAL,),
+            (CapabilityType.STRUCTURED_QUERY,),
+        },
+        TaskType.WEB_RESEARCH: {
+            (CapabilityType.WEB_SEARCH,),
+        },
+        TaskType.CORPORATE_AND_WEB: {
+            (CapabilityType.CORPORATE_RETRIEVAL, CapabilityType.WEB_SEARCH),
+        },
+        TaskType.GENERAL: {
+            (CapabilityType.GENERAL_RESPONSE,),
+        },
+    }
+    actual_plan = tuple(actual_capabilities)
+    if actual_plan not in allowed_capability_plans.get(decision.task_type, set()):
+        raise BrainDecisionRejected("proposed plan is not allowed for the deterministic task type")
+    if decision.required_capabilities != actual_capabilities:
+        raise BrainDecisionRejected("required capabilities must match the proposed plan")
     if decision.task_type == TaskType.CORPORATE_AND_WEB and decision.plan[1].depends_on != [decision.plan[0].step_id]:
         raise BrainDecisionRejected("web fallback must depend on corporate retrieval")
     return decision
@@ -149,7 +182,13 @@ async def decide(
         "deterministic_task_type": classify_task(question, allowed_sources).value,
         "allowed_task_types": [item.value for item in TaskType],
         "allowed_source_policy": [item.value for item in allowed_sources],
-        "allowed_capabilities": [item.value for item in (CapabilityType.CORPORATE_RETRIEVAL, CapabilityType.WEB_SEARCH, CapabilityType.WEB_FETCH, CapabilityType.GENERAL_RESPONSE)],
+        "allowed_capabilities": [item.value for item in (
+        CapabilityType.CORPORATE_RETRIEVAL,
+        CapabilityType.STRUCTURED_QUERY,
+        CapabilityType.WEB_SEARCH,
+        CapabilityType.WEB_FETCH,
+        CapabilityType.GENERAL_RESPONSE,
+    )],
         "max_steps": budget.max_steps,
     }
     try:
@@ -164,7 +203,9 @@ async def decide(
                     "include corporate retrieval followed by web search depending on it. The proposed plan covers "
                     "initial steps only: do not add WEB_FETCH, which the Control Plane schedules after selecting "
                     "returned search evidence. required_capabilities must list only the initial plan capabilities. "
-                    "Use only allowed values."
+                    "For CORPORATE_KNOWLEDGE, choose either CORPORATE_RETRIEVAL or STRUCTURED_QUERY. "
+    "STRUCTURED_QUERY is for exact structured-document/table queries and must include exact input "
+    "such as source_file or document_id+version; never invent result rows."
                 )},
                 {"role": "user", "content": json.dumps({"question": question, "contract": prompt}, ensure_ascii=False)},
             ], "temperature": 0.0, "max_tokens": 500, "response_format": {"type": "json_object"}},

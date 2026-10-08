@@ -146,3 +146,36 @@ class DocumentVersionResponse(BaseModel):
     access_scope: str
     created_at: str
     updated_at: str
+
+
+class StructuredFilter(BaseModel):
+    column: str = Field(min_length=1)
+    operator: str = Field(pattern=r"^(eq|gte|lte|gt|lt|contains)$")
+    value: str = Field(min_length=1)
+
+
+class StructuredQueryRequest(BaseModel):
+    source_file: str | None = None
+    document_id: str | None = None
+    version: int | None = Field(default=None, ge=1)
+    sheet: str | None = None
+    filters: list[StructuredFilter] = Field(default_factory=list)
+    columns: list[str] | None = None
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+class StructuredRowEvidence(BaseModel):
+    sheet: str
+    sheet_index: int
+    row_index: int
+    cells: dict[str, Any]
+
+
+class StructuredQueryResponse(BaseModel):
+    document_id: str
+    version: int
+    source_file: str
+    content_hash: str
+    sheet: str | None = None
+    total_matches: int
+    rows: list[StructuredRowEvidence]

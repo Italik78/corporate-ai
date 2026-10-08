@@ -37,6 +37,117 @@ def test_rejects_invalid_schema(raw):
         validate_decision(raw, question="договор", allowed_sources=[SourceClass.CORPORATE], budget=Budget())
 
 
+def test_accepts_structured_query_for_corporate_task():
+    raw = valid_decision(
+        intent="structured_document_query",
+        required_capabilities=["STRUCTURED_QUERY"],
+        plan=[
+            {
+                "step_id": "structured-query",
+                "capability": "STRUCTURED_QUERY",
+                "input": {
+                    "source_file": "DfQueryToExcel (7.1).xls",
+                    "sheet": "Export-D2",
+                    "filters": [
+                        {"column": "Край", "operator": "gte", "value": "05.10.2026"},
+                        {"column": "Край", "operator": "lte", "value": "31.01.2027"},
+                    ],
+                },
+            }
+        ],
+    )
+
+    decision = validate_decision(
+        raw,
+        question="Покажи договорите от DfQueryToExcel (7.1).xls с крайна дата до 31.01.2027.",
+        allowed_sources=[SourceClass.CORPORATE],
+        budget=Budget(),
+    )
+
+    assert decision.task_type == TaskType.CORPORATE_KNOWLEDGE
+    assert decision.plan[0].capability == CapabilityType.STRUCTURED_QUERY
+    assert decision.plan[0].input["source_file"] == "DfQueryToExcel (7.1).xls"
+
+
+def test_rejects_structured_query_without_exact_document_reference():
+    raw = valid_decision(
+        required_capabilities=["STRUCTURED_QUERY"],
+        plan=[
+            {
+                "step_id": "structured-query",
+                "capability": "STRUCTURED_QUERY",
+                "input": {
+                    "sheet": "Export-D2",
+                    "filters": [],
+                },
+            }
+        ],
+    )
+
+    with pytest.raises(
+        BrainDecisionRejected,
+        match="structured query requires exact source_file or document_id/version",
+    ):
+        validate_decision(
+            raw,
+            question="Покажи данните от таблицата.",
+            allowed_sources=[SourceClass.CORPORATE],
+            budget=Budget(),
+        )
+
+
+def test_rejects_structured_query_with_ambiguous_document_reference():
+    raw = valid_decision(
+        required_capabilities=["STRUCTURED_QUERY"],
+        plan=[
+            {
+                "step_id": "structured-query",
+                "capability": "STRUCTURED_QUERY",
+                "input": {
+                    "source_file": "DfQueryToExcel (7.1).xls",
+                    "document_id": "a37ea2b0-a9d8-4b0b-8d35-08e90fee632e",
+                    "version": 1,
+                },
+            }
+        ],
+    )
+
+    with pytest.raises(
+        BrainDecisionRejected,
+        match="structured query cannot combine source_file with document_id/version",
+    ):
+        validate_decision(
+            raw,
+            question="Покажи данните от конкретния документ.",
+            allowed_sources=[SourceClass.CORPORATE],
+            budget=Budget(),
+        )
+
+
+def test_rejects_structured_query_without_corporate_source():
+    raw = valid_decision(
+        source_policy=["WEB"],
+        required_capabilities=["STRUCTURED_QUERY"],
+        plan=[
+            {
+                "step_id": "structured-query",
+                "capability": "STRUCTURED_QUERY",
+                "input": {
+                    "source_file": "DfQueryToExcel (7.1).xls",
+                },
+            }
+        ],
+    )
+
+    with pytest.raises(BrainDecisionRejected, match="corporate capability is not authorized"):
+        validate_decision(
+            raw,
+            question="Покажи договорите от DfQueryToExcel (7.1).xls.",
+            allowed_sources=[SourceClass.WEB],
+            budget=Budget(),
+        )
+
+
 def test_rejects_unknown_or_disallowed_capability():
     with pytest.raises(BrainDecisionRejected):
         validate_decision(
@@ -100,6 +211,14 @@ def test_rejects_invalid_dependencies_and_budget():
             valid_decision(plan=[{"step_id": "a", "capability": "CORPORATE_RETRIEVAL"}, {"step_id": "b", "capability": "CORPORATE_RETRIEVAL"}]),
             question="договор", allowed_sources=[SourceClass.CORPORATE], budget=Budget(max_steps=1),
         )
+
+
+def test_file_table_query_is_corporate_with_web_fallback_allowed():
+    task_type = classify_task(
+        "Покажи ми редовете от таблицата във файла DfQueryToExcel",
+        [SourceClass.CORPORATE, SourceClass.WEB],
+    )
+    assert task_type == TaskType.CORPORATE_KNOWLEDGE
 
 
 def test_deterministic_fallback_is_bounded_and_source_limited():

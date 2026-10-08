@@ -37,6 +37,7 @@ from .models import (
     Task,
     TaskState,
 )
+from .brain import BrainDecision
 from .planner import build_plan
 from .retrieval_strategy import merge_unique_candidates
 from .registry import CapabilityRegistry
@@ -157,9 +158,13 @@ class Orchestrator:
                 f"(finish_reason={finish_reason}, usage={usage}): {exc}"
             ) from exc
 
-    def create_plan(self, task: Task) -> Plan:
+    def create_plan(
+        self,
+        task: Task,
+        brain_decision: BrainDecision | None = None,
+    ) -> Plan:
         task.state = TaskState.UNDERSTANDING
-        plan = build_plan(task)
+        plan = build_plan(task, brain_decision)
         task.state = TaskState.PLANNING
         return plan
 
@@ -251,6 +256,10 @@ class Orchestrator:
         results: list[CapabilityResult] = []
         retrieved_candidates: list[dict] = []
         web_evidence_candidates: list[dict] = []
+        structured_query_mode = any(
+            step.capability == CapabilityType.STRUCTURED_QUERY
+            for step in plan.steps
+        )
 
         async def execute_retrieval_step(step: PlanStep) -> CapabilityResult | None:
             try:
@@ -293,8 +302,81 @@ class Orchestrator:
                 if result is not None:
                     results.append(result)
 
+                    if (
+                        result.capability == CapabilityType.STRUCTURED_QUERY
+                        and not result.success
+                        and result.data.get("clarification_required") is True
+                    ):
+                        matches = result.data.get("matches", [])
+                        source_file = result.data.get("source_file")
+
+                        filenames = [
+                            str(item.get("source_file", "")).strip()
+                            for item in matches
+                            if isinstance(item, dict)
+                            and str(item.get("source_file", "")).strip()
+                        ]
+                        filenames = list(dict.fromkeys(filenames))
+
+                        task.missing_context = (
+                            [f"уточнение на файла: {name}" for name in filenames]
+                            if filenames
+                            else ["уточнение на файла"]
+                        )
+                        task.state = TaskState.CLARIFICATION_REQUIRED
+                        plan.status = "EXECUTED"
+
+                        if filenames:
+                            clarification_question = (
+                                f"Кой файл имате предвид за „{source_file}“? "
+                                + " или ".join(
+                                    f"„{name}“" for name in filenames
+                                )
+                                + "?"
+                            )
+                        else:
+                            clarification_question = (
+                                f"Моля, уточнете кой файл имате предвид за "
+                                f"„{source_file}“."
+                            )
+
+                        evaluation = EvidenceEvaluationResult(
+                            status=EvidenceStatus.INSUFFICIENT_EVIDENCE
+                        )
+                        conflicts = ConflictAnalysisResult()
+                        synthesis = SynthesisResult(
+                            answer="",
+                            resolution=QuestionResolution.AMBIGUOUS,
+                            needs_clarification=True,
+                            clarification_question=clarification_question,
+                            uncertainty="The requested corporate file reference is ambiguous.",
+                        )
+                        verification = VerificationResult(
+                            passed=False,
+                            reason="CLARIFICATION_REQUIRED_BEFORE_EVIDENCE_EXECUTION",
+                        )
+
+                        return (
+                            results,
+                            evaluation,
+                            conflicts,
+                            synthesis,
+                            verification,
+                        )
+
                     if result.success:
                         completed_step_ids.add(step.step_id)
+
+                    if (
+                        result.success
+                        and result.capability == CapabilityType.STRUCTURED_QUERY
+                    ):
+                        rows = result.data.get("rows", [])
+                        if isinstance(rows, list):
+                            retrieved_candidates[:] = merge_unique_candidates(
+                                retrieved_candidates,
+                                rows,
+                            )
 
                     if (
                         result.success
@@ -437,6 +519,9 @@ class Orchestrator:
             )
 
             if synthesis.resolution != QuestionResolution.INSUFFICIENT:
+                break
+
+            if structured_query_mode:
                 break
 
             task.state = TaskState.MORE_EVIDENCE_REQUIRED
@@ -613,7 +698,10 @@ class Orchestrator:
         semantic_errors = []
 
         if (
-            synthesis.resolution == QuestionResolution.ANSWERABLE
+            synthesis.resolution in (
+                QuestionResolution.ANSWERABLE,
+                QuestionResolution.CONFLICTED,
+            )
             and verification.passed
         ):
             try:
