@@ -376,7 +376,7 @@ The roadmap must not mark C8 complete from documentation alone. Runtime implemen
 
 ## Phase D — AI Brain / Intelligent Orchestration
 
-**Status: ARCHITECTURE DEFINED / IMPLEMENTATION NOT STARTED**
+**Status: IMPLEMENTATION IN PROGRESS / D1-D2 FOUNDATION IMPLEMENTED LOCALLY**
 
 Objective: transform the current deterministic Orchestrator into a bounded **AI Brain + deterministic Control Plane**.
 
@@ -387,30 +387,52 @@ Authoritative design:
 - `99_MANAGEMENT/AI_BRAIN_NEW_CHAT_PROMPT.md`
 
 ### D1 — Brain Decision Contract
-- [ ] inspect current Orchestrator/Gateway runtime
-- [ ] define Pydantic Brain Decision Contract v1
-- [ ] define structured decision enums and capability step schema
-- [ ] define invalid-output/fail-closed behavior
-- [ ] add Brain contract unit tests
-- [ ] add mocked Brain contract fixtures
+- [x] inspect current Orchestrator/Gateway runtime
+- [x] define Pydantic Brain Decision Contract v1
+- [x] define structured decision enums and capability step schema
+- [x] define invalid-output/fail-closed behavior
+- [x] add Brain contract unit tests
+- [x] add mocked Brain contract fixtures
+- [x] add `STRUCTURED_QUERY` capability contract
+- [x] validate structured-query capability input contract
 
 ### D2 — Deterministic Control Plane
-- [ ] validate Brain decisions
-- [ ] validate capability authorization
-- [ ] validate capability schemas
-- [ ] validate dependencies
-- [ ] validate budgets
-- [ ] validate state transitions
-- [ ] prevent direct arbitrary model execution
-- [ ] preserve deterministic fallback
+- [x] validate Brain decisions
+- [x] validate capability authorization
+- [x] validate capability schemas
+- [x] validate dependencies
+- [x] validate budgets
+- [x] validate state transitions
+- [x] prevent direct arbitrary model execution
+- [x] preserve deterministic fallback
+- [x] reject ambiguous structured document references
+- [x] require exact structured-document reference
+- [x] preserve corporate evidence provenance
+
+### D2.1 — Structured corporate document queries
+- [x] Document Ingestion structured-query endpoint
+- [x] XLS/tabular filtering capability
+- [x] Orchestrator `StructuredQueryCapability`
+- [x] structured-query evidence IDs
+- [x] structured-query focused tests
+- [x] real DGX validation against `DfQueryToExcel (7.1).xls`
+- [x] validated 9 matching rows for the 05.10.2026–31.01.2027 `Край` range
+- [ ] deterministic filename extraction parser
+- [ ] parser unit test matrix
+- [ ] deterministic routing before unnecessary Brain LLM planning
+
+Important current defect: the real Qwen Brain still selects `CORPORATE_RETRIEVAL` for a clearly structured tabular request. The target routing is deterministic structured-query detection first, followed by Brain planning only when deterministic parsing is insufficient.
+
+The first parser implementation exposed a filename extraction defect for filenames containing spaces and parentheses. It is being corrected before integration.
 
 ### D3 — Brain Runtime
-- [ ] Qwen3.6 Brain client
-- [ ] strict JSON output mode
-- [ ] Brain system prompt
-- [ ] structured decision parser
-- [ ] decision trace without private chain-of-thought
-- [ ] real DGX Brain contract validation
+- [x] Qwen3.6 Brain client foundation
+- [x] Brain system prompt foundation
+- [x] structured decision parser/validation foundation
+- [x] decision trace without private chain-of-thought
+- [ ] strict production JSON/contract acceptance matrix
+- [ ] real DGX Brain contract validation matrix
+- [ ] production Brain-driven routing
 
 ### D4 — Dynamic Orchestration
 - [ ] execute one capability step at a time
