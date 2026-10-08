@@ -450,3 +450,61 @@ Implementation status:
 
 First implementation milestone:
 **Brain Decision Contract v1 + deterministic Control Plane validator**, followed by real Qwen contract validation before any production routing switch.
+
+
+## 2026-10-08 — AI Brain / Structured Query implementation checkpoint
+
+The AI Brain implementation has progressed beyond the architecture-only state recorded above.
+
+### Implemented locally and validated
+
+- Brain Decision Contract v1 models are implemented.
+- Deterministic Control Plane validation is implemented.
+- `STRUCTURED_QUERY` is an authorized capability.
+- Document Ingestion exposes the structured-query endpoint.
+- The Orchestrator has a dedicated `StructuredQueryCapability`.
+- Exact corporate document references are required for structured queries.
+- Ambiguous source-file references are rejected with a clarification-required result.
+- Structured results preserve corporate provenance and structured evidence IDs.
+- Structured query tests: 3 Orchestrator tests passed.
+- Document Ingestion structured-query tests: 8 passed.
+- Document Ingestion suite excluding the poller-state test: 58 passed.
+- Orchestrator full suite: 78 passed.
+
+### Real runtime validation
+
+The file `DfQueryToExcel (7.1).xls` was queried with:
+
+- `Край >= 05.10.2026`
+- `Край <= 31.01.2027`
+
+The structured capability returned exactly 9 matching rows.
+
+### Current Brain routing defect
+
+The real Qwen Brain still selects `CORPORATE_RETRIEVAL` for this clearly structured tabular request instead of `STRUCTURED_QUERY`.
+
+The accepted target routing is:
+
+`classify_task → deterministic structured-query parser → STRUCTURED_QUERY when unambiguous → Qwen Brain only when deterministic parsing is insufficient`
+
+A deterministic parser was created locally to implement this boundary. Its first validation exposed a filename extraction defect: `DfQueryToExcel (7.1).xls` was incorrectly parsed as `(7.1).xls`. The parser correction is therefore still under validation.
+
+### Git synchronization status
+
+The latest structured-query implementation is not yet fully present on the online GitHub branch. The authoritative synchronization checkpoint is:
+
+`99_MANAGEMENT/2026-10-08_IMPLEMENTATION_CHECKPOINT.md`
+
+Do not mark the structured-query Brain routing milestone COMPLETE until the corrected parser, integration tests, real DGX smoke test and Git synchronization are complete.
+
+### Immediate next steps
+
+1. Correct deterministic filename extraction.
+2. Add parser unit tests.
+3. Integrate deterministic structured-query routing before Brain LLM planning.
+4. Update Brain tests.
+5. Run full affected-service tests.
+6. Run real DGX smoke validation.
+7. Synchronize accepted local code/tests to GitHub.
+8. Update this status again after acceptance.
