@@ -125,3 +125,22 @@
 93. Brain traceability must preserve decisions, selected capabilities, evidence references, budgets and outcomes without persisting or exposing private model chain-of-thought.
 94. The implementation plan is documented in `01_ARCHITECTURE/AI_BRAIN_IMPLEMENTATION_PLAN.md`; the controlled implementation prompt is `99_MANAGEMENT/AI_BRAIN_NEW_CHAT_PROMPT.md`.
 95. The first implementation milestone is Brain Decision Contract v1 + Control Plane validator. Production routing must not be switched to Brain-driven behavior before this contract is validated.
+
+
+## 2026-10-08 — AI Brain implementation decisions
+
+60. Keep `TaskType.CORPORATE_KNOWLEDGE` as the broad corporate task classification; structured tabular/document queries are a deterministic sub-classification, not a new top-level task type.
+
+61. Deterministic structured-query detection must run before Qwen Brain planning when the request contains an unambiguous corporate structured-data intent. This prevents the LLM from unnecessarily choosing semantic RAG for a query that requires exact row/column filtering.
+
+62. The deterministic structured-query parser may extract only information explicitly present in the user request. It must not invent sheet names, document IDs, column names, row positions or metadata.
+
+63. Structured queries require an exact corporate document reference. Ambiguous source-file references must fail closed and request clarification rather than selecting an arbitrary document.
+
+64. The structured-query capability remains behind the deterministic Control Plane and must preserve corporate provenance/evidence IDs.
+
+65. The Brain may be bypassed for a deterministic structured query only when the parser produces a valid, schema-compatible and unambiguous capability request. Otherwise the request proceeds to Brain planning.
+
+66. The deterministic planner remains the fallback when Brain execution is unavailable or invalid. Structured-query detection must be available to that fallback as well.
+
+67. Parser correctness is a release gate. A parser that extracts only a suffix such as `(7.1).xls` from `DfQueryToExcel (7.1).xls` must not be integrated into production routing.
